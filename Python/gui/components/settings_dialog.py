@@ -70,6 +70,19 @@ class SettingsDialog(ctk.CTkToplevel):
         self.btn_frame = ctk.CTkFrame(self, fg_color=p["toolbar_bg"], corner_radius=0, height=55)
         self.btn_frame.pack(side="bottom", fill="x")
 
+        import webbrowser
+        self.btn_donate_settings = ctk.CTkButton(
+            self.btn_frame,
+            text="🍺 Buy me a beer",
+            fg_color="transparent",
+            hover_color=p["btn_hover"],
+            text_color="#f59e0b",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=36,
+            command=lambda: webbrowser.open("https://square.link/u/obDkxl6F")
+        )
+        self.btn_donate_settings.pack(side="left", padx=20, pady=10)
+
         self.btn_save = ctk.CTkButton(
             self.btn_frame,
             text="Save Preferences",

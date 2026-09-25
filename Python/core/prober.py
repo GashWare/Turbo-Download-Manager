@@ -33,6 +33,10 @@ class ProbeResult:
     media_thumbnail: Optional[str] = None
     is_torrent: bool = False
     torrent_info_hash: Optional[str] = None
+    is_playlist: bool = False
+    playlist_title: Optional[str] = None
+    playlist_count: int = 0
+    playlist_entries: Optional[List[dict]] = None
 
 
 def extract_filename_from_headers(headers: Dict[str, str], fallback_url: str) -> str:
@@ -72,8 +76,18 @@ def extract_filename_from_headers(headers: Dict[str, str], fallback_url: str) ->
     return filename
 
 
+def is_likely_playlist_url(url: str) -> bool:
+    """Detect if URL is a YouTube playlist or video URL containing a playlist parameter."""
+    if not url:
+        return False
+    lower = url.lower()
+    if ("youtube.com" in lower or "youtu.be" in lower) and ("list=" in lower or "/playlist" in lower):
+        return True
+    return False
+
+
 def is_likely_media_streaming_url(url: str) -> bool:
-    """Detect if URL is from YouTube, Facebook, Instagram, TikTok, Vimeo, etc."""
+    """Detect if URL is from YouTube, Facebook, Instagram, TikTok, Vimeo, Twitch, etc."""
     if not url:
         return False
     lower = url.lower()
@@ -202,11 +216,13 @@ def probe_url(
                 except Exception:
                     continue
 
+            is_playlist_candidate = is_likely_playlist_url(url_stripped)
             ydl_opts = {
                 "quiet": True,
                 "no_warnings": True,
                 "skip_download": True,
                 "socket_timeout": 20,
+                "extract_flat": True if is_playlist_candidate else "in_playlist",
                 "js_runtimes": {"node": {}},
             }
             if cookie_browser:
@@ -220,6 +236,52 @@ def probe_url(
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url_stripped, download=False)
                 if info:
+                    _type = info.get("_type")
+                    entries = info.get("entries")
+                    if _type == "playlist" or (entries is not None and len(list(entries or [])) > 0):
+                        entries_list = []
+                        raw_entries = list(entries or [])
+                        for idx, e in enumerate(raw_entries):
+                            if not e:
+                                continue
+                            e_id = e.get("id") or ""
+                            e_url = e.get("url")
+                            if not e_url or "://" not in e_url:
+                                if e_id:
+                                    e_url = f"https://www.youtube.com/watch?v={e_id}"
+                                else:
+                                    continue
+                            e_title = e.get("title") or f"Track {idx + 1}"
+                            entries_list.append({
+                                "index": idx + 1,
+                                "id": e_id,
+                                "url": e_url,
+                                "title": e_title,
+                                "duration": e.get("duration"),
+                                "uploader": e.get("uploader") or e.get("channel") or ""
+                            })
+
+                        playlist_title = info.get("title") or "YouTube Playlist"
+                        clean_pl_title = re.sub(r'[<>:"/\\|?*]', '_', playlist_title).strip()
+                        return ProbeResult(
+                            url=url_stripped,
+                            final_url=url_stripped,
+                            filename=f"{clean_pl_title} ({len(entries_list)} items)",
+                            total_bytes=0,
+                            supports_range=True,
+                            etag=None,
+                            last_modified=None,
+                            content_type="video/mp4",
+                            category=DownloadCategory.VIDEO,
+                            is_media_stream=True,
+                            media_title=playlist_title,
+                            media_thumbnail=info.get("thumbnail"),
+                            is_playlist=True,
+                            playlist_title=playlist_title,
+                            playlist_count=len(entries_list),
+                            playlist_entries=entries_list
+                        )
+
                     title = info.get("title") or "video"
                     ext = info.get("ext", "mp4")
                     clean_title = re.sub(r'[<>:"/\\|?*]', '_', title).strip()

@@ -229,10 +229,22 @@ class AddDownloadDialog(ctk.CTkToplevel):
         self.entry_path.insert(0, self.settings.default_save_dir)
         self.entry_path.pack(side="left", fill="x", expand=True, padx=(0, 8))
 
+        btn_new_folder = ctk.CTkButton(
+            path_row,
+            text="📁 + Folder",
+            width=78,
+            height=32,
+            fg_color=p["btn_bg"],
+            hover_color=p["btn_hover"],
+            text_color=p["btn_text"],
+            command=self._create_new_folder
+        )
+        btn_new_folder.pack(side="right", padx=(6, 0))
+
         btn_browse = ctk.CTkButton(
             path_row,
             text="Browse...",
-            width=80,
+            width=75,
             height=32,
             fg_color=p["btn_bg"],
             hover_color=p["btn_hover"],
@@ -303,12 +315,41 @@ class AddDownloadDialog(ctk.CTkToplevel):
         # Mode Selector: Video + Audio vs Audio Only
         self.seg_media_mode = ctk.CTkSegmentedButton(
             self.media_config_frame,
-            values=["🎬 Video + Audio", "🎵 Audio Only"],
+            values=["🎬 Video (MP4)", "🎵 Audio (MP3)"],
             command=self._on_media_mode_changed,
             height=28
         )
-        self.seg_media_mode.set("🎬 Video + Audio")
+        self.seg_media_mode.set("🎬 Video (MP4)")
         self.seg_media_mode.pack(fill="x", padx=12, pady=(0, 8))
+
+        # Playlist Configuration Container (Revealed when playlist is detected)
+        self.playlist_config_frame = ctk.CTkFrame(self.media_config_frame, fg_color="transparent")
+
+        self.lbl_playlist_badge = ctk.CTkLabel(
+            self.playlist_config_frame,
+            text="📑 YouTube Playlist Detected",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#2ec4b6"
+        )
+        self.lbl_playlist_badge.pack(anchor="w", padx=12, pady=(2, 4))
+
+        self.seg_playlist_scope = ctk.CTkSegmentedButton(
+            self.playlist_config_frame,
+            values=["📑 Download Full Playlist", "🎬 Single Item Only"],
+            command=self._on_playlist_scope_changed,
+            height=28
+        )
+        self.seg_playlist_scope.set("📑 Download Full Playlist")
+        self.seg_playlist_scope.pack(fill="x", padx=12, pady=(0, 6))
+
+        self.chk_playlist_folder = ctk.CTkCheckBox(
+            self.playlist_config_frame,
+            text="📁 Create subfolder named after playlist",
+            font=ctk.CTkFont(size=11),
+            text_color=p["text_primary"]
+        )
+        self.chk_playlist_folder.select()
+        self.chk_playlist_folder.pack(anchor="w", padx=12, pady=(0, 6))
 
         # Media Quality & Format Dropdowns Grid
         self.media_dropdown_frame = ctk.CTkFrame(self.media_config_frame, fg_color="transparent")
@@ -470,8 +511,44 @@ class AddDownloadDialog(ctk.CTkToplevel):
             self._set_torrent_options_visible(True)
             self._start_probe(fpath)
 
+    def _on_playlist_scope_changed(self, scope: str) -> None:
+        if not (self.probe_result and self.probe_result.is_playlist):
+            return
+        if scope.startswith("📑"):
+            self.btn_add_now.configure(text=f"Download Playlist ({self.probe_result.playlist_count})")
+            if hasattr(self, "entry_filename"):
+                self.entry_filename.delete(0, "end")
+                self.entry_filename.insert(0, f"{self.probe_result.playlist_title} ({self.probe_result.playlist_count} items)")
+        else:
+            self.btn_add_now.configure(text="Download Item")
+            if hasattr(self, "entry_filename"):
+                self.entry_filename.delete(0, "end")
+                self.entry_filename.insert(0, self.probe_result.filename)
+
+    def _create_new_folder(self) -> None:
+        dialog = ctk.CTkInputDialog(text="Enter new folder name:", title="Create New Folder")
+        name = dialog.get_input()
+        if name:
+            clean_name = re.sub(r'[<>:"/\\|?*]', '_', name).strip()
+            if clean_name:
+                current_dir = self.entry_path.get().strip() or self.settings.default_save_dir
+                new_path = os.path.join(current_dir, clean_name)
+                try:
+                    os.makedirs(new_path, exist_ok=True)
+                    self.entry_path.delete(0, "end")
+                    self.entry_path.insert(0, new_path)
+                    self.lbl_probe_status.configure(
+                        text=f"📁 Created & selected folder: {clean_name}",
+                        text_color="#2ec4b6"
+                    )
+                except Exception as e:
+                    self.lbl_probe_status.configure(
+                        text=f"Failed to create folder: {e}",
+                        text_color="#e63946"
+                    )
+
     def _on_media_mode_changed(self, mode: str) -> None:
-        if mode == "🎵 Audio Only":
+        if "Audio" in mode:
             self.lbl_quality.configure(text="Audio Quality:", text_color="#90a4ae")
             self.combo_quality.configure(state="disabled")
             self.combo_format.configure(values=self.AUDIO_FORMATS)
@@ -517,6 +594,16 @@ class AddDownloadDialog(ctk.CTkToplevel):
                 text="🧲 BitTorrent stream / Magnet link detected (Leech Only & P2P Acceleration available)",
                 text_color="#00b4d8"
             )
+        elif is_likely_playlist_url(url):
+            self._set_media_options_visible(True)
+            if hasattr(self, "lbl_media_title"):
+                self.lbl_media_title.configure(text="📑 YouTube Playlist Options")
+            if hasattr(self, "playlist_config_frame"):
+                self.playlist_config_frame.pack(fill="x", pady=(0, 6))
+            self.lbl_probe_status.configure(
+                text="📑 YouTube Playlist link detected (Preparing full playlist & MP3/MP4 extraction)",
+                text_color="#00b4d8"
+            )
         elif is_likely_media_streaming_url(url):
             self._set_media_options_visible(True)
             url_lower = url.lower()
@@ -526,6 +613,8 @@ class AddDownloadDialog(ctk.CTkToplevel):
                 platform_label = "Instagram Reel / Video"
             elif any(d in url_lower for d in ("tiktok.com",)):
                 platform_label = "TikTok Video"
+            elif any(d in url_lower for d in ("twitch.tv",)):
+                platform_label = "Twitch Video / Clip"
             elif any(d in url_lower for d in ("youtube.com", "youtu.be")):
                 platform_label = "YouTube Video / Short"
             else:
@@ -566,6 +655,12 @@ class AddDownloadDialog(ctk.CTkToplevel):
                 text="🔍 Probing BitTorrent metadata & swarm...",
                 text_color="#f39c12"
             )
+        elif is_likely_playlist_url(url):
+            self._set_media_options_visible(True)
+            self.lbl_probe_status.configure(
+                text="🔍 Probing YouTube Playlist & tracks...",
+                text_color="#f39c12"
+            )
         elif is_likely_media_streaming_url(url):
             self._set_media_options_visible(True)
             url_lower = url.lower()
@@ -602,6 +697,19 @@ class AddDownloadDialog(ctk.CTkToplevel):
             )
             return
 
+        if res.is_playlist:
+            self._set_media_options_visible(True)
+            if hasattr(self, "playlist_config_frame"):
+                self.playlist_config_frame.pack(fill="x", pady=(0, 6))
+            if hasattr(self, "lbl_playlist_badge"):
+                self.lbl_playlist_badge.configure(text=f"📑 Playlist: {res.playlist_title} ({res.playlist_count} items)")
+            self.lbl_probe_status.configure(
+                text=f"✨ Playlist Ready • {res.playlist_count} tracks detected (MP3 / MP4)",
+                text_color="#2ec4b6"
+            )
+            self.btn_add_now.configure(text=f"Download Playlist ({res.playlist_count})")
+            return
+
         if res.is_media_stream:
             self._set_media_options_visible(True)
             url_lower = res.url.lower()
@@ -611,6 +719,8 @@ class AddDownloadDialog(ctk.CTkToplevel):
                 platform_label = "Instagram Reel / Video"
             elif any(d in url_lower for d in ("tiktok.com",)):
                 platform_label = "TikTok Video"
+            elif any(d in url_lower for d in ("twitch.tv",)):
+                platform_label = "Twitch Video / Clip"
             elif any(d in url_lower for d in ("youtube.com", "youtu.be")):
                 platform_label = "YouTube Video / Short"
             else:
@@ -659,7 +769,7 @@ class AddDownloadDialog(ctk.CTkToplevel):
 
         if self._media_visible:
             mode_val = self.seg_media_mode.get()
-            audio_only = (mode_val == "🎵 Audio Only")
+            audio_only = "Audio" in mode_val
             quality_val = self.combo_quality.get()
             if "2160p" in quality_val:
                 media_quality = "2160p"
@@ -681,6 +791,54 @@ class AddDownloadDialog(ctk.CTkToplevel):
                 if candidate in format_val:
                     media_format = candidate
                     break
+
+        # Check if full playlist download mode is selected
+        is_playlist_mode = (
+            self.probe_result and
+            self.probe_result.is_playlist and
+            hasattr(self, "seg_playlist_scope") and
+            self.seg_playlist_scope.get().startswith("📑") and
+            self.probe_result.playlist_entries
+        )
+
+        if is_playlist_mode:
+            # Determine destination directory
+            if hasattr(self, "chk_playlist_folder") and self.chk_playlist_folder.get() == 1:
+                clean_pl_title = re.sub(r'[<>:"/\\|?*]', '_', self.probe_result.playlist_title or "YouTube Playlist").strip()
+                target_dir = os.path.join(save_path, clean_pl_title)
+            else:
+                target_dir = save_path
+
+            try:
+                os.makedirs(target_dir, exist_ok=True)
+            except Exception:
+                pass
+
+            # Queue each playlist entry
+            for entry in self.probe_result.playlist_entries:
+                item_title = entry.get("title") or "video"
+                clean_item = re.sub(r'[<>:"/\\|?*]', '_', item_title).strip()
+                item_fname = f"{clean_item}.{media_format}"
+                item_data = {
+                    "url": entry["url"],
+                    "filename": item_fname,
+                    "save_path": target_dir,
+                    "num_connections": conns,
+                    "auto_start": auto_start,
+                    "category": DownloadCategory.AUDIO if audio_only else DownloadCategory.VIDEO,
+                    "is_media_stream": True,
+                    "audio_only": audio_only,
+                    "media_quality": media_quality,
+                    "media_format": media_format,
+                    "is_torrent": False
+                }
+                try:
+                    self.on_add(item_data)
+                except Exception:
+                    pass
+
+            self.destroy()
+            return
 
         # Torrent options extraction
         is_torrent = self._torrent_visible or (self.probe_result and self.probe_result.is_torrent) or is_likely_torrent_url(url)

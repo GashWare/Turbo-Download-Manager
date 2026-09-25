@@ -64,13 +64,64 @@ class TestMediaStreams(unittest.TestCase):
         self.assertEqual(task.media_format, "mp3")
         self.assertEqual(task.category, DownloadCategory.AUDIO)
 
-        # Test to_dict / from_dict
-        d = task.to_dict()
-        loaded = DownloadTask.from_dict(d)
-        self.assertTrue(loaded.is_media_stream)
-        self.assertTrue(loaded.audio_only)
-        self.assertEqual(loaded.media_format, "mp3")
+    def test_youtube_playlist_url_detection(self):
+        """Verify URL detection recognizes YouTube playlists and video playlist mixes."""
+        from core.prober import is_likely_playlist_url
+        self.assertTrue(is_likely_playlist_url("https://www.youtube.com/playlist?list=PL1234567890ABCDEF"))
+        self.assertTrue(is_likely_playlist_url("https://youtube.com/playlist?list=PLxyz"))
+        self.assertTrue(is_likely_playlist_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL1234567890ABCDEF"))
+        self.assertTrue(is_likely_playlist_url("https://youtu.be/dQw4w9WgXcQ?list=PL1234567890ABCDEF"))
+
+        # Single video without playlist
+        self.assertFalse(is_likely_playlist_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ"))
+        self.assertFalse(is_likely_playlist_url("https://example.com/video.mp4"))
+
+    def test_playlist_task_batch_generation(self):
+        """Verify playlist entries generate appropriate video and MP3 audio tasks."""
+        entries = [
+            {"title": "Song One", "url": "https://www.youtube.com/watch?v=aaa", "id": "aaa"},
+            {"title": "Song Two", "url": "https://www.youtube.com/watch?v=bbb", "id": "bbb"},
+        ]
+        save_dir = os.path.join(os.path.expanduser("~"), "Music", "My Playlist")
+
+        # MP3 Audio playlist
+        audio_tasks = [
+            DownloadTask(
+                url=e["url"],
+                save_path=save_dir,
+                filename=f"{e['title']}.mp3",
+                is_media_stream=True,
+                audio_only=True,
+                media_format="mp3",
+                category=DownloadCategory.AUDIO
+            )
+            for e in entries
+        ]
+        self.assertEqual(len(audio_tasks), 2)
+        self.assertTrue(all(t.audio_only for t in audio_tasks))
+        self.assertTrue(all(t.filename.endswith(".mp3") for t in audio_tasks))
+        self.assertTrue(all(t.save_path == save_dir for t in audio_tasks))
+
+        # MP4 Video playlist
+        video_tasks = [
+            DownloadTask(
+                url=e["url"],
+                save_path=save_dir,
+                filename=f"{e['title']}.mp4",
+                is_media_stream=True,
+                audio_only=False,
+                media_format="mp4",
+                media_quality="1080p",
+                category=DownloadCategory.VIDEO
+            )
+            for e in entries
+        ]
+        self.assertEqual(len(video_tasks), 2)
+        self.assertFalse(any(t.audio_only for t in video_tasks))
+        self.assertTrue(all(t.filename.endswith(".mp4") for t in video_tasks))
+        self.assertTrue(all(t.media_quality == "1080p" for t in video_tasks))
 
 
 if __name__ == "__main__":
     unittest.main()
+

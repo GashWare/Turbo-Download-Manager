@@ -401,13 +401,29 @@ class TurboDownloadApp(ctk.CTk):
         )
         self.lbl_status_msg.pack(side="left", fill="x", expand=True, padx=15)
 
+        # Support / Buy Me a Beer Button
+        import webbrowser
+        self.btn_donate = ctk.CTkButton(
+            self.statusbar,
+            text="🍺 Buy me a beer",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            width=115,
+            height=22,
+            fg_color="transparent",
+            hover_color="#2b2d35",
+            text_color="#f59e0b",
+            cursor="hand2",
+            command=lambda: webbrowser.open("https://square.link/u/obDkxl6F")
+        )
+        self.btn_donate.pack(side="right", padx=(4, 15))
+
         self.lbl_clip_status = ctk.CTkLabel(
             self.statusbar,
             text="📋 Clipboard Monitor: Active" if self.settings.clipboard_monitoring else "📋 Clipboard Monitor: Off",
             font=ctk.CTkFont(size=11),
             text_color="#2ec4b6" if self.settings.clipboard_monitoring else "#a0a5b5"
         )
-        self.lbl_clip_status.pack(side="right", padx=15)
+        self.lbl_clip_status.pack(side="right", padx=(10, 5))
 
     def apply_theme(self, theme_name: str) -> None:
         """Applies the specified theme to all main window widgets and active cards."""
