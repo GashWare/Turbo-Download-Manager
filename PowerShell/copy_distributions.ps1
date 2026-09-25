@@ -22,7 +22,18 @@ if ($msiBuilt) {
 $portableSource = Get-ChildItem (Join-Path $PythonDir "build\exe.*") -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($portableSource -and (Test-Path $portableSource.FullName)) {
     $portableZip = Join-Path $DistDir "Turbo-Download-Manager-2.0.0-Windows-Portable.zip"
-    Compress-Archive -Path (Join-Path $portableSource.FullName "*") -DestinationPath $portableZip -Force
+    $pSrc = $portableSource.FullName
+    python -c "
+import os, zipfile
+src = r'$pSrc'
+out_p = r'$portableZip'
+with zipfile.ZipFile(out_p, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+    for root, dirs, files in os.walk(src):
+        for f in files:
+            abs_p = os.path.join(root, f)
+            rel_p = os.path.relpath(abs_p, src).replace('\\\\', '/')
+            zf.write(abs_p, rel_p)
+"
     Write-Host "[OK] Updated Portable ZIP: $portableZip" -ForegroundColor Green
 }
 
@@ -49,8 +60,17 @@ Copy-Item (Join-Path $RootDir "README.md") -Destination (Join-Path $linuxAppDir 
 $linuxZip = Join-Path $DistDir "Turbo-Download-Manager-2.0.0-Linux.zip"
 $linuxTar = Join-Path $DistDir "Turbo-Download-Manager-2.0.0-Linux.tar.gz"
 
-if (Test-Path $linuxZip) { [System.GC]::Collect(); [System.GC]::WaitForPendingFinalizers() }
-Compress-Archive -Path (Join-Path $linuxAppDir "*") -DestinationPath $linuxZip -Force
+python -c "
+import os, zipfile
+src = r'$linuxAppDir'
+out_p = r'$linuxZip'
+with zipfile.ZipFile(out_p, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+    for root, dirs, files in os.walk(src):
+        for f in files:
+            abs_p = os.path.join(root, f)
+            rel_p = os.path.relpath(abs_p, src).replace('\\\\', '/')
+            zf.write(abs_p, rel_p)
+"
 
 try {
     tar.exe -czf $linuxTar -C $stagingDir "Turbo-Download-Manager-2.0.0-Linux" 2>$null
