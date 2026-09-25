@@ -1,0 +1,69 @@
+{
+  "manifest_version": 2,
+  "name": "Turbo Download Manager Integration",
+  "version": "2.0.0",
+  "description": "High-Performance Download Acceleration & Video Capture Integration for Turbo Download Manager.",
+  "author": "GashWare",
+  "icons": {
+    "16": "icon-16.png",
+    "32": "icon-32.png",
+    "48": "icon-48.png",
+    "64": "icon-64.png",
+    "128": "icon-128.png",
+    "256": "icon-256.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "turbodm@gashware.org",
+      "strict_min_version": "91.0"
+    }
+  },
+  "applications": {
+    "gecko": {
+      "id": "turbodm@gashware.org",
+      "strict_min_version": "91.0"
+    }
+  },
+  "permissions": [
+    "downloads",
+    "downloads.open",
+    "storage",
+    "contextMenus",
+    "activeTab",
+    "tabs",
+    "notifications",
+    "<all_urls>",
+    "http://127.0.0.1:9666/*",
+    "http://localhost:9666/*"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_end",
+      "all_frames": true
+    }
+  ],
+  "browser_action": {
+    "default_icon": {
+      "16": "icon-16.png",
+      "32": "icon-32.png",
+      "48": "icon-48.png",
+      "64": "icon-64.png",
+      "128": "icon-128.png",
+      "256": "icon-256.png"
+    },
+    "default_title": "Turbo Download Manager",
+    "default_popup": "popup.html"
+  },
+  "web_accessible_resources": [
+    "*.png",
+    "icons/*",
+    "content.css"
+  ]
+}

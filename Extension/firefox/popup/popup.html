@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Turbo Download Manager</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="popup-header">
+      <div class="logo-area">
+        <img src="icon-32.png" alt="Turbo DM Logo" class="app-logo">
+        <div>
+          <h1 class="app-title">TURBO DM</h1>
+          <span class="app-subtitle">Download Accelerator</span>
+        </div>
+      </div>
+      <div id="statusBadge" class="status-badge connecting" title="Click to refresh connection">
+        <span class="status-dot"></span>
+        <span id="statusText">Checking...</span>
+      </div>
+    </header>
+
+    <!-- Desktop App Required / Not Found Banner -->
+    <div id="offlineBanner" class="offline-banner" style="display: none;">
+      <div class="offline-banner-header">
+        <span class="offline-icon">⚠️</span>
+        <div class="offline-title">Desktop Software Required</div>
+      </div>
+      <p class="offline-desc">
+        Turbo Download Manager desktop engine is required for high-speed download acceleration and browser capture.
+      </p>
+
+      <!-- OS-Detected Primary Download Button -->
+      <a id="primaryDownloadBtn" href="https://github.com/GashWare/Turbo-Download-Manager/raw/main/MSI/Turbo%20Download%20Manager-2.0.0-win64.msi" target="_blank" class="download-app-btn primary">
+        <span id="primaryDownloadIcon">🪟</span>
+        <span id="primaryDownloadText">Download for Windows (Installer)</span>
+      </a>
+
+      <!-- Alternative OS / Source Links -->
+      <div class="os-buttons-grid">
+        <a id="winDownloadBtn" href="https://github.com/GashWare/Turbo-Download-Manager/raw/main/MSI/Turbo%20Download%20Manager-2.0.0-win64.msi" target="_blank" class="download-app-btn secondary" title="Windows 64-bit MSI Installer">
+          <span>🪟 Windows (.msi)</span>
+        </a>
+        <a id="linuxDownloadBtn" href="https://github.com/GashWare/Turbo-Download-Manager/raw/main/Distributions/Turbo-Download-Manager-2.0.0-Linux.tar.gz" target="_blank" class="download-app-btn secondary" title="Linux 64-bit Package">
+          <span>🐧 Linux (.tar.gz)</span>
+        </a>
+      </div>
+
+      <div class="offline-footer-links">
+        <a href="https://github.com/GashWare/Turbo-Download-Manager" target="_blank" class="offline-link">📦 GitHub Project & Releases</a>
+        <button id="launchAppBtn" class="offline-text-btn">⚡ Already Installed? Launch App</button>
+      </div>
+    </div>
+
+    <!-- Quick Download Box -->
+    <section class="quick-download-section">
+      <label for="urlInput" class="section-label">⚡ Fast Download / Video Capture</label>
+      <div class="input-group">
+        <input type="text" id="urlInput" placeholder="Paste video or file URL here..." autocomplete="off">
+        <button id="pasteBtn" class="icon-btn" title="Paste from Clipboard">📋</button>
+      </div>
+      <div class="action-btn-group">
+        <button id="downloadBtn" class="primary-btn">Download</button>
+        <button id="audioOnlyBtn" class="secondary-btn">Audio (MP3)</button>
+      </div>
+      <div id="feedbackMsg" class="feedback-msg"></div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- Preferences / Toggles -->
+    <section class="settings-section">
+      <label class="section-label">⚙️ Integration Settings</label>
+      
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <span class="toggle-title">Intercept Downloads</span>
+          <span class="toggle-desc">Auto-capture file downloads from Firefox</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggleIntercept">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <span class="toggle-title">Video Hover Button</span>
+          <span class="toggle-desc">Show overlay on YouTube, X, IG, FB & videos</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggleHover">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <span class="toggle-title">Auto-Start Tasks</span>
+          <span class="toggle-desc">Start downloads immediately without prompt</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggleAutoStart">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <span class="toggle-title">🛠️ Developer Mode</span>
+          <span class="toggle-desc">Custom local API endpoints & live diagnostics</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggleDevMode">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </section>
+
+    <!-- Developer Mode Settings (Collapsible) -->
+    <section id="devSection" class="dev-section" style="display: none;">
+      <div class="divider"></div>
+      <label class="section-label">🛠️ Local Connection Configuration</label>
+      
+      <div class="dev-field">
+        <label for="apiHostInput" class="dev-label">Local API Host / Port:</label>
+        <div class="input-group">
+          <input type="text" id="apiHostInput" value="http://127.0.0.1:9666" placeholder="http://127.0.0.1:9666">
+          <button id="saveApiHostBtn" class="dev-btn">Save & Ping</button>
+        </div>
+      </div>
+
+      <div class="dev-diagnostic-box" id="devDiagnosticBox">
+        <span class="diag-label">Diagnostics:</span>
+        <pre id="devLogOutput">Ready to test connection.</pre>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="popup-footer">
+      <button id="captureCurrentPageBtn" class="link-btn">⚡ Capture Current Tab Video</button>
+      <div class="footer-version">v2.0.0 • GashWare</div>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
