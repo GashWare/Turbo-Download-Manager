@@ -171,7 +171,19 @@
       return pageUrl;
     }
 
-    // 5. TikTok / Reddit / Vimeo / Dailymotion
+    // 5. Twitch resolution (Clips, VODs, Highlights, Channel streams)
+    if (hostname.includes("twitch.tv")) {
+      if (targetEl) {
+        const card = targetEl.closest("article, div[data-target], .tw-card, div[data-a-target*='card']");
+        if (card) {
+          const clipLink = card.querySelector("a[href*='/clip/'], a[href*='/videos/'], a[data-a-target*='link']");
+          if (clipLink && clipLink.href) return clipLink.href;
+        }
+      }
+      return pageUrl;
+    }
+
+    // 6. TikTok / Reddit / Vimeo / Dailymotion
     if (hostname.includes("tiktok.com") || hostname.includes("reddit.com") || hostname.includes("vimeo.com") || hostname.includes("dailymotion.com")) {
       return pageUrl;
     }
@@ -365,6 +377,10 @@
       "div[data-testid='videoComponent']",
       "div[data-testid='videoPlayer']",
       "div[data-pagelet*='Video']",
+      "div[data-a-target='video-player']",
+      "div[data-a-target='player-overlay-click-handler']",
+      ".video-player__container",
+      ".highwind-video-player",
       "article:has(video)",
       "div[class*='video-player']",
       "div[class*='player-container']",

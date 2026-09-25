@@ -37,6 +37,8 @@ class TestMediaStreams(unittest.TestCase):
         self.assertTrue(is_likely_media_streaming_url("https://www.reddit.com/r/videos/comments/abc123/cool_video/"))
         self.assertTrue(is_likely_media_streaming_url("https://vimeo.com/76979871"))
         self.assertTrue(is_likely_media_streaming_url("https://www.twitch.tv/videos/123456789"))
+        self.assertTrue(is_likely_media_streaming_url("https://clips.twitch.tv/FrailTameCaterpillar"))
+        self.assertTrue(is_likely_media_streaming_url("https://www.twitch.tv/shroud/clip/FrailTameCaterpillar"))
 
         # Non-media files
         self.assertFalse(is_likely_media_streaming_url("https://example.com/archive.zip"))
