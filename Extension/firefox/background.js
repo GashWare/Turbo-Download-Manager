@@ -177,9 +177,12 @@ if (api && api.downloads && api.downloads.onCreated) {
         return;
       }
 
-      // Avoid recursive interception or blob URLs
+      // Avoid recursive interception or blob URLs or our own desktop installer downloads
       const url = downloadItem.url || "";
       if (!url || url.startsWith("blob:") || url.startsWith("data:") || url.startsWith("about:")) {
+        return;
+      }
+      if (url.includes("GashWare/Turbo-Download-Manager") || url.includes("Turbo%20Download%20Manager") || url.includes("Turbo-Download-Manager")) {
         return;
       }
 
@@ -210,6 +213,33 @@ if (api && api.downloads && api.downloads.onCreated) {
 // Runtime message dispatcher from content script & popup
 if (api && api.runtime && api.runtime.onMessage) {
   api.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === "DOWNLOAD_INSTALLER") {
+      const osType = request.os || "windows";
+      const isLinux = osType === "linux";
+      const installerUrl = isLinux
+        ? "https://github.com/GashWare/Turbo-Download-Manager/raw/main/Distributions/Turbo-Download-Manager-2.0.0-Linux.tar.gz"
+        : "https://github.com/GashWare/Turbo-Download-Manager/raw/main/MSI/Turbo%20Download%20Manager-2.0.0-win64.msi";
+      const installerName = isLinux ? "Turbo-Download-Manager-2.0.0-Linux.tar.gz" : "Turbo Download Manager-2.0.0-win64.msi";
+
+      if (api && api.downloads && api.downloads.download) {
+        api.downloads.download({
+          url: installerUrl,
+          filename: installerName,
+          saveAs: false,
+          conflictAction: "uniquify"
+        }).then((id) => {
+          showNotification("⚡ Turbo Download Manager", `Downloading installer directly in browser: ${installerName}`);
+          sendResponse({ success: true, downloadId: id, filename: installerName });
+        }).catch((err) => {
+          sendResponse({ success: false, error: err.message, fallbackUrl: installerUrl });
+        });
+        return true;
+      } else {
+        sendResponse({ success: false, fallbackUrl: installerUrl });
+        return false;
+      }
+    }
+
     if (request.action === "DOWNLOAD_MEDIA" || request.action === "SEND_TO_TURBODM") {
       sendDownloadToTurboDM({
         url: request.url,

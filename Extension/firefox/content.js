@@ -282,6 +282,32 @@
       docLink.textContent = "📦 View on GitHub Releases & Documentation";
       actions.appendChild(docLink);
 
+      function triggerDirectInstallerDownload(e, osType, btnEl) {
+        if (api && api.runtime && api.runtime.sendMessage) {
+          e.preventDefault();
+          const origText = btnEl.textContent;
+          btnEl.textContent = "⏳ Downloading in Browser...";
+          api.runtime.sendMessage({ action: "DOWNLOAD_INSTALLER", os: osType }).then((resp) => {
+            if (resp && resp.success) {
+              btnEl.textContent = "✓ Downloading! Click Firefox Downloads Bar to Run";
+              setTimeout(() => {
+                btnEl.textContent = origText;
+              }, 4000);
+            } else if (resp && resp.fallbackUrl) {
+              window.open(resp.fallbackUrl, "_blank");
+              btnEl.textContent = origText;
+            }
+          }).catch(() => {
+            window.open(btnEl.href, "_blank");
+            btnEl.textContent = origText;
+          });
+        }
+      }
+
+      primaryBtn.addEventListener("click", (e) => triggerDirectInstallerDownload(e, isLinux ? "linux" : "windows", primaryBtn));
+      winBtn.addEventListener("click", (e) => triggerDirectInstallerDownload(e, "windows", winBtn));
+      linuxBtn.addEventListener("click", (e) => triggerDirectInstallerDownload(e, "linux", linuxBtn));
+
       card.appendChild(header);
       card.appendChild(desc);
       card.appendChild(actions);

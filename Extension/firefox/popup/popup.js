@@ -60,6 +60,30 @@ document.addEventListener("DOMContentLoaded", async () => {
     primaryDownloadText.textContent = "Download for Windows (Installer)";
   }
 
+  function handleDirectInstallerDownload(e, osType) {
+    e.preventDefault();
+    showFeedback("⚡ Downloading installer directly in Firefox...", "success");
+    api.runtime.sendMessage({ action: "DOWNLOAD_INSTALLER", os: osType }).then((resp) => {
+      if (resp && resp.success) {
+        showFeedback(`✓ Download started! Click Firefox Downloads to run installer.`, "success");
+      } else if (resp && resp.fallbackUrl) {
+        window.open(resp.fallbackUrl, "_blank");
+      }
+    }).catch(() => {
+      window.open(osType === "linux" ? LINUX_PKG_URL : WIN_MSI_URL, "_blank");
+    });
+  }
+
+  if (primaryDownloadBtn) {
+    primaryDownloadBtn.addEventListener("click", (e) => handleDirectInstallerDownload(e, userOS));
+  }
+  if (winDownloadBtn) {
+    winDownloadBtn.addEventListener("click", (e) => handleDirectInstallerDownload(e, "windows"));
+  }
+  if (linuxDownloadBtn) {
+    linuxDownloadBtn.addEventListener("click", (e) => handleDirectInstallerDownload(e, "linux"));
+  }
+
   // Load saved settings
   const api = typeof browser !== "undefined" ? browser : chrome;
   const config = await api.storage.local.get({
