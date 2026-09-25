@@ -28,6 +28,40 @@
   }
 
   /**
+   * Safely sets overlay button content using DOM APIs (Zero innerHTML).
+   */
+  function setButtonContent(btn, iconText, labelText, showAudioOpt = true) {
+    while (btn.firstChild) {
+      btn.removeChild(btn.firstChild);
+    }
+
+    const iconSpan = document.createElement("span");
+    iconSpan.className = "turbodm-icon";
+    iconSpan.style.pointerEvents = "none";
+    iconSpan.textContent = iconText;
+    btn.appendChild(iconSpan);
+
+    const textSpan = document.createElement("span");
+    textSpan.className = "turbodm-text";
+    textSpan.style.pointerEvents = "none";
+    textSpan.textContent = labelText;
+    btn.appendChild(textSpan);
+
+    if (showAudioOpt) {
+      const audioSpan = document.createElement("span");
+      audioSpan.className = "turbodm-audio-opt";
+      audioSpan.title = "Download Audio Only (MP3)";
+      audioSpan.textContent = "MP3";
+      btn.appendChild(audioSpan);
+    }
+  }
+
+  function resetOverlayButtonState(btn) {
+    btn.classList.remove("turbodm-success");
+    setButtonContent(btn, "⚡", "Download with Turbo DM", true);
+  }
+
+  /**
    * Lazily creates the single shared overlay button DOM node.
    */
   function getOrCreateOverlayButton() {
@@ -38,11 +72,7 @@
     overlayBtn = document.createElement("div");
     overlayBtn.id = "turbodm-floating-overlay";
     overlayBtn.className = "turbodm-video-overlay-btn";
-    overlayBtn.innerHTML = `
-      <span class="turbodm-icon" style="pointer-events:none;">⚡</span>
-      <span class="turbodm-text" style="pointer-events:none;">Download with Turbo DM</span>
-      <span class="turbodm-audio-opt" title="Download Audio Only (MP3)">MP3</span>
-    `;
+    setButtonContent(overlayBtn, "⚡", "Download with Turbo DM", true);
 
     // Click handler with error handling
     overlayBtn.addEventListener("click", (e) => {
@@ -182,36 +212,72 @@
         : "https://github.com/GashWare/Turbo-Download-Manager/raw/main/MSI/Turbo%20Download%20Manager-2.0.0-win64.msi";
       const primaryLabel = isLinux ? "🐧 Download for Linux (.tar.gz)" : "🪟 Download for Windows (.msi)";
 
-      modal.innerHTML = `
-        <div class="turbodm-modal-card">
-          <div class="turbodm-modal-header">
-            <div class="turbodm-modal-title">⚡ Turbo Download Manager Desktop Required</div>
-            <button class="turbodm-modal-close" id="turbodmModalClose">✕</button>
-          </div>
-          <p class="turbodm-modal-desc">
-            To download and capture video streams at maximum accelerated speeds, the Turbo Download Manager desktop software is required.
-          </p>
-          <div class="turbodm-modal-actions">
-            <a href="${primaryUrl}" target="_blank" class="turbodm-modal-btn primary">
-              ${primaryLabel}
-            </a>
-            <div class="turbodm-modal-grid">
-              <a href="https://github.com/GashWare/Turbo-Download-Manager/raw/main/MSI/Turbo%20Download%20Manager-2.0.0-win64.msi" target="_blank" class="turbodm-modal-btn secondary">
-                🪟 Windows Installer
-              </a>
-              <a href="https://github.com/GashWare/Turbo-Download-Manager/raw/main/Distributions/Turbo-Download-Manager-2.0.0-Linux.tar.gz" target="_blank" class="turbodm-modal-btn secondary">
-                🐧 Linux Package
-              </a>
-            </div>
-            <a href="https://github.com/GashWare/Turbo-Download-Manager" target="_blank" class="turbodm-modal-link">
-              📦 View on GitHub Releases & Documentation
-            </a>
-          </div>
-        </div>
-      `;
+      const card = document.createElement("div");
+      card.className = "turbodm-modal-card";
+
+      const header = document.createElement("div");
+      header.className = "turbodm-modal-header";
+
+      const title = document.createElement("div");
+      title.className = "turbodm-modal-title";
+      title.textContent = "⚡ Turbo Download Manager Desktop Required";
+
+      const closeBtn = document.createElement("button");
+      closeBtn.className = "turbodm-modal-close";
+      closeBtn.id = "turbodmModalClose";
+      closeBtn.textContent = "✕";
+
+      header.appendChild(title);
+      header.appendChild(closeBtn);
+
+      const desc = document.createElement("p");
+      desc.className = "turbodm-modal-desc";
+      desc.textContent = "To download and capture video streams at maximum accelerated speeds, the Turbo Download Manager desktop software is required.";
+
+      const actions = document.createElement("div");
+      actions.className = "turbodm-modal-actions";
+
+      const primaryBtn = document.createElement("a");
+      primaryBtn.href = primaryUrl;
+      primaryBtn.target = "_blank";
+      primaryBtn.className = "turbodm-modal-btn primary";
+      primaryBtn.textContent = primaryLabel;
+      actions.appendChild(primaryBtn);
+
+      const grid = document.createElement("div");
+      grid.className = "turbodm-modal-grid";
+
+      const winBtn = document.createElement("a");
+      winBtn.href = "https://github.com/GashWare/Turbo-Download-Manager/raw/main/MSI/Turbo%20Download%20Manager-2.0.0-win64.msi";
+      winBtn.target = "_blank";
+      winBtn.className = "turbodm-modal-btn secondary";
+      winBtn.textContent = "🪟 Windows Installer";
+
+      const linuxBtn = document.createElement("a");
+      linuxBtn.href = "https://github.com/GashWare/Turbo-Download-Manager/raw/main/Distributions/Turbo-Download-Manager-2.0.0-Linux.tar.gz";
+      linuxBtn.target = "_blank";
+      linuxBtn.className = "turbodm-modal-btn secondary";
+      linuxBtn.textContent = "🐧 Linux Package";
+
+      grid.appendChild(winBtn);
+      grid.appendChild(linuxBtn);
+      actions.appendChild(grid);
+
+      const docLink = document.createElement("a");
+      docLink.href = "https://github.com/GashWare/Turbo-Download-Manager";
+      docLink.target = "_blank";
+      docLink.className = "turbodm-modal-link";
+      docLink.textContent = "📦 View on GitHub Releases & Documentation";
+      actions.appendChild(docLink);
+
+      card.appendChild(header);
+      card.appendChild(desc);
+      card.appendChild(actions);
+      modal.appendChild(card);
+
       document.body.appendChild(modal);
 
-      modal.querySelector("#turbodmModalClose").addEventListener("click", () => {
+      closeBtn.addEventListener("click", () => {
         modal.classList.remove("turbodm-modal-visible");
       });
       modal.addEventListener("click", (e) => {
@@ -229,16 +295,11 @@
     if (!url) return;
 
     const btn = getOrCreateOverlayButton();
-    const originalContent = btn.innerHTML;
-
-    btn.innerHTML = `
-      <span class="turbodm-icon" style="pointer-events:none;">⏳</span>
-      <span class="turbodm-text" style="pointer-events:none;">Sending to Turbo DM...</span>
-    `;
+    setButtonContent(btn, "⏳", "Sending to Turbo DM...", false);
 
     if (!api || !api.runtime) {
       showAppRequiredModal();
-      btn.innerHTML = originalContent;
+      resetOverlayButtonState(btn);
       return;
     }
 
@@ -251,35 +312,28 @@
       }).then((resp) => {
         if (resp && resp.success) {
           btn.classList.add("turbodm-success");
-          btn.innerHTML = `
-            <span class="turbodm-icon" style="pointer-events:none;">⚡</span>
-            <span class="turbodm-text" style="pointer-events:none;">${audioOnly ? "Audio Sent to Turbo DM!" : "Queued in Turbo DM!"}</span>
-          `;
+          setButtonContent(btn, "⚡", audioOnly ? "Audio Sent to Turbo DM!" : "Queued in Turbo DM!", false);
           setTimeout(() => {
-            btn.classList.remove("turbodm-success");
-            btn.innerHTML = originalContent;
+            resetOverlayButtonState(btn);
             scheduleHide(600);
           }, 2200);
         } else if (resp && resp.fallback) {
           // Sent via protocol fallback
-          btn.innerHTML = `
-            <span class="turbodm-icon" style="pointer-events:none;">⚡</span>
-            <span class="turbodm-text" style="pointer-events:none;">Launching Turbo DM...</span>
-          `;
+          setButtonContent(btn, "⚡", "Launching Turbo DM...", false);
           setTimeout(() => {
-            btn.innerHTML = originalContent;
+            resetOverlayButtonState(btn);
           }, 2000);
         } else {
           showAppRequiredModal();
-          btn.innerHTML = originalContent;
+          resetOverlayButtonState(btn);
         }
       }).catch((err) => {
         showAppRequiredModal();
-        btn.innerHTML = originalContent;
+        resetOverlayButtonState(btn);
       });
     } catch (err) {
       showAppRequiredModal();
-      btn.innerHTML = originalContent;
+      resetOverlayButtonState(btn);
     }
   }
 
