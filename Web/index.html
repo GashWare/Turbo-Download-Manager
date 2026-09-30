@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚡ Turbo Download Manager - High-Performance Accelerator & BitTorrent Client</title>
+    <meta name="description" content="Accelerated multi-connection download engine, zero-upload Leech Only BitTorrent client, browser protocol associations, and YouTube streaming extractor with modern CustomTkinter & Rich CLI.">
+    <link rel="icon" type="image/png" href="../Python/gui/assets/app_icon.png">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        cyber: {
+                            bg: '#0a0d14',
+                            card: '#121722',
+                            border: '#1f293d',
+                            cyan: '#00f0ff',
+                            green: '#00ff66',
+                            purple: '#b026ff',
+                            yellow: '#fcee0a',
+                            pink: '#ff007f'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif']
+                    },
+                    animation: {
+                        'pulse-glow': 'pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'float': 'float 4s ease-in-out infinite'
+                    },
+                    keyframes: {
+                        pulseGlow: {
+                            '0%, 100%': { opacity: '1', filter: 'drop-shadow(0 0 15px rgba(0, 240, 255, 0.6))' },
+                            '50%': { opacity: '.7', filter: 'drop-shadow(0 0 5px rgba(0, 240, 255, 0.2))' }
+                        },
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%': { transform: 'translateY(-10px)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #080b11;
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+        .matrix-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.15;
+        }
+        .glow-cyan {
+            box-shadow: 0 0 25px -5px rgba(0, 240, 255, 0.4);
+        }
+        .glow-green {
+            box-shadow: 0 0 25px -5px rgba(0, 255, 102, 0.4);
+        }
+        .glow-purple {
+            box-shadow: 0 0 25px -5px rgba(176, 38, 255, 0.4);
+        }
+        .glass-card {
+            background: rgba(18, 23, 34, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glass-card:hover {
+            border-color: rgba(0, 240, 255, 0.35);
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #00f0ff 0%, #7000ff 50%, #ff007f 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .gradient-green-text {
+            background: linear-gradient(135deg, #00ff66 0%, #00f0ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0a0d14;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00f0ff;
+        }
+    </style>
+</head>
+<body class="bg-[#080b11] text-slate-200 antialiased selection:bg-cyan-500 selection:text-black">
+
+    <!-- Matrix Canvas Background -->
+    <canvas id="matrixCanvas" class="matrix-bg"></canvas>
+
+    <!-- Navigation Header -->
+    <header class="fixed top-0 left-0 right-0 z-50 glass-card border-b border-white/5 bg-[#0a0d14]/80 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center font-mono font-bold text-xl shadow-lg shadow-cyan-500/30 text-black">
+                    ⚡
+                </div>
+                <div>
+                    <span class="text-xl font-extrabold tracking-tight text-white flex items-center gap-2">
+                        TURBO <span class="text-xs px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-mono">v2.0.0</span>
+                    </span>
+                    <p class="text-[10px] tracking-widest text-slate-400 uppercase font-mono">Download Accelerator & P2P</p>
+                </div>
+            </div>
+
+            <nav class="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-300">
+                <a href="#features" class="hover:text-cyan-400 transition-colors">Features</a>
+                <a href="#torrent" class="hover:text-cyan-400 transition-colors flex items-center gap-1.5"><span class="text-emerald-400">🧲</span> BitTorrent</a>
+                <a href="#browser" class="hover:text-cyan-400 transition-colors">Browser Integration</a>
+                <a href="#media" class="hover:text-cyan-400 transition-colors">Media Extractor</a>
+                <a href="#themes" class="hover:text-cyan-400 transition-colors">Themes</a>
+                <a href="#cli" class="hover:text-cyan-400 transition-colors">Rich CLI</a>
+                <a href="#download" class="hover:text-cyan-400 transition-colors">Download</a>
+            </nav>
+
+            <div class="flex items-center space-x-3">
+                <a href="https://github.com/GashWare/Turbo-Download-Manager" target="_blank" class="px-4 py-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-white text-xs font-mono font-semibold border border-slate-700 transition-all flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+                    <span>GitHub</span>
+                </a>
+                <a href="#download" class="px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black text-xs font-bold uppercase tracking-wider font-mono shadow-md shadow-cyan-500/20 transition-all">
+                    Get v2.0
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="relative pt-36 pb-20 md:pt-44 md:pb-32 z-10 overflow-hidden">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-4xl mx-auto">
+                <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass-card border border-cyan-500/30 text-xs font-mono text-cyan-400 mb-8 animate-pulse-glow">
+                    <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                    <span>NEW: BitTorrent 2.1 Engine + Leech Only + Browser Protocol Interceptor</span>
+                </div>
+
+                <h1 class="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight text-white mb-6 leading-tight">
+                    Hyper-Accelerated Downloads <br>
+                    <span class="gradient-text">& Zero-Upload P2P</span>
+                </h1>
+
+                <p class="text-lg sm:text-xl text-slate-300 mb-10 leading-relaxed font-light max-w-3xl mx-auto">
+                    Split HTTP streams into <span class="text-cyan-400 font-semibold font-mono">1–32 parallel threads</span> with adaptive dynamic work-stealing, download BitTorrent & Magnet links in protected <span class="text-emerald-400 font-semibold font-mono">Leech Only mode</span>, extract streaming audio & video, and control everything via a sleek <span class="text-purple-400 font-semibold">CustomTkinter GUI</span> or an animated <span class="text-yellow-400 font-semibold font-mono">Rich CLI</span>.
+                </p>
+
+                <!-- CTA Button Cluster -->
+                <div class="flex flex-wrap justify-center gap-4 mb-16">
+                    <a href="#download" class="px-8 py-4 rounded-xl bg-gradient-to-r from-cyan-500 via-cyan-400 to-blue-500 hover:scale-105 text-black font-extrabold text-base shadow-xl shadow-cyan-500/25 transition-all flex items-center gap-3">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        <span>Download Windows Installer (MSI)</span>
+                    </a>
+                    <a href="#download" class="px-6 py-4 rounded-xl glass-card hover:bg-slate-800 text-white font-semibold text-base border border-slate-700 hover:border-cyan-500/50 transition-all flex items-center gap-2">
+                        <svg class="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                        <span>Portable ZIP & Linux Packages</span>
+                    </a>
+                </div>
+
+                <!-- Live Engine Simulation Widget -->
+                <div class="glass-card rounded-2xl p-6 sm:p-8 text-left border border-cyan-500/30 shadow-2xl relative overflow-hidden">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
+                        <div class="flex items-center space-x-3">
+                            <span class="w-3 h-3 rounded-full bg-red-500"></span>
+                            <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
+                            <span class="w-3 h-3 rounded-full bg-green-500"></span>
+                            <span class="font-mono text-xs text-slate-400 ml-2">Turbo Engine Active Visualizer — Multi-Segment Work Stealing</span>
+                        </div>
+                        <div class="flex items-center space-x-4 font-mono text-xs">
+                            <span class="text-cyan-400 font-bold" id="simSpeed">48.6 MB/s</span>
+                            <span class="text-slate-400">ETA: <span class="text-white" id="simEta">12s</span></span>
+                            <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">16 Threads</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="font-semibold text-white flex items-center gap-2">
+                                <span class="text-cyan-400">📦</span> Ubuntu-24.04-desktop-amd64.iso
+                            </span>
+                            <span class="font-mono text-xs text-slate-300" id="simProgressText">3.42 GB / 5.20 GB (65.8%)</span>
+                        </div>
+
+                        <!-- Segment Blocks Canvas Simulator -->
+                        <div class="grid grid-cols-16 gap-1 bg-black/50 p-2 rounded-lg border border-slate-800" id="segmentBlocksGrid">
+                            <!-- Populated via JS -->
+                        </div>
+
+                        <div class="w-full bg-slate-900 h-3 rounded-full overflow-hidden p-0.5 border border-slate-800">
+                            <div id="simProgressBar" class="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-emerald-400 rounded-full transition-all duration-300" style="width: 65.8%;"></div>
+                        </div>
+
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2 text-xs font-mono text-slate-400">
+                            <div class="p-2 rounded bg-slate-900/60 border border-slate-800">
+                                <span class="text-[10px] uppercase text-slate-500 block">Direct I/O Preallocation</span>
+                                <span class="text-emerald-400 font-bold">✓ Zero Concat Delay</span>
+                            </div>
+                            <div class="p-2 rounded bg-slate-900/60 border border-slate-800">
+                                <span class="text-[10px] uppercase text-slate-500 block">Dynamic Work-Stealing</span>
+                                <span class="text-cyan-400 font-bold">✓ Active Steal: Seg #9</span>
+                            </div>
+                            <div class="p-2 rounded bg-slate-900/60 border border-slate-800">
+                                <span class="text-[10px] uppercase text-slate-500 block">Crash Recovery Meta</span>
+                                <span class="text-yellow-400 font-bold">✓ Checkpointed</span>
+                            </div>
+                            <div class="p-2 rounded bg-slate-900/60 border border-slate-800">
+                                <span class="text-[10px] uppercase text-slate-500 block">Integrity Verifier</span>
+                                <span class="text-purple-400 font-bold">SHA-256 Armed</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Key Feature Grid -->
+    <section id="features" class="py-24 relative z-10 border-t border-slate-800/80 bg-[#0a0e17]/50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-16">
+                <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mb-4">
+                    Engineered for Maximum Speed & Total Control
+                </h2>
+                <p class="text-slate-400 text-base">
+                    Every layer of Turbo Download Manager is optimized for zero CPU waste, thread-safe asynchronous operations, and resilient network transport.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                
+                <!-- Feature 1: Multi-Connection Work Stealing -->
+                <div class="glass-card rounded-2xl p-8 border border-slate-800 hover:border-cyan-500/40 transition-all group">
+                    <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 text-2xl mb-6 group-hover:scale-110 transition-transform">
+                        ⚡
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-3 group-hover:text-cyan-400 transition-colors">
+                        Parallel HTTP Range Work-Stealing
+                    </h3>
+                    <p class="text-slate-400 text-sm leading-relaxed mb-4">
+                        Spawns up to 32 concurrent HTTP Range worker threads. When high-bandwidth threads finish early, they dynamically identify lagging chunks and split remaining byte intervals in real time.
+                    </p>
+                    <div class="font-mono text-xs text-cyan-400/80 flex items-center gap-1.5">
+                        <span>RFC 7233 Range</span> • <span>Dynamic Load Balancing</span>
+                    </div>
+                </div>
+
+                <!-- Feature 2: BitTorrent & Leech Only -->
+                <div id="torrent" class="glass-card rounded-2xl p-8 border border-slate-800 hover:border-emerald-500/40 transition-all group">
+                    <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-2xl mb-6 group-hover:scale-110 transition-transform">
+                        🧲
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-3 group-hover:text-emerald-400 transition-colors">
+                        BitTorrent 2.1 & "Leech Only" Mode
+                    </h3>
+                    <p class="text-slate-400 text-sm leading-relaxed mb-4">
+                        Powered by <code class="text-emerald-400 font-mono">libtorrent 2.1.1</code>. Downloads Magnet links and <code class="text-emerald-400 font-mono">.torrent</code> files. Protected <strong>Leech Only</strong> mode clamps upload bandwidth to zero and auto-pauses immediately on finish to stop seeding.
+                    </p>
+                    <div class="font-mono text-xs text-emerald-400/80 flex items-center gap-1.5">
+                        <span>Sequential Streaming</span> • <span>Zero Upload Seeding</span>
+                    </div>
+                </div>
+
+                <!-- Feature 3: Firefox Browser Extension & Video Hover -->
+                <div id="extension" class="glass-card rounded-2xl p-8 border border-slate-800 hover:border-cyan-400/40 transition-all group">
+                    <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 text-2xl mb-6 group-hover:scale-110 transition-transform">
+                        🦊
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-3 group-hover:text-cyan-400 transition-colors">
+                        Firefox Browser Extension & Video Hover
+                    </h3>
+                    <p class="text-slate-400 text-sm leading-relaxed mb-4">
+                        Seamlessly integrates with Firefox to automatically capture file downloads. Hovering over any video player across YouTube, X/Twitter, Instagram Reels, Facebook, or TikTok reveals the floating <strong>⚡ Download with Download Manager</strong> button with 1-click MP3 audio extraction.
+                    </p>
+                    <div class="font-mono text-xs text-cyan-400/80 flex items-center gap-1.5">
+                        <span>Auto-Interception</span> • <span>Hover Overlay</span> • <span>Local REST API</span>
+                    </div>
+                </div>
+
+                <!-- Feature 4: Social Media Video & Audio Extractor -->
+                <div id="media" class="glass-card rounded-2xl p-8 border border-slate-800 hover:border-pink-500/40 transition-all group">
+                    <div class="w-12 h-12 rounded-xl bg-pink-500/10 border border-pink-500/30 flex items-center justify-center text-pink-400 text-2xl mb-6 group-hover:scale-110 transition-transform">
+                        🎬
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-3 group-hover:text-pink-400 transition-colors">
+                        Social Media Video & Audio Extractor
+                    </h3>
+                    <p class="text-slate-400 text-sm leading-relaxed mb-4">
+                        Full accelerated extraction for <strong>X / Twitter, Instagram Reels, Facebook Reels & Watch, YouTube 4K, TikTok</strong>, and 1,000+ sites. Features dynamic Audio-Only mode (MP3 320k, M4A, FLAC, WAV), multi-threaded fragment streams, and zero-residue temp cleanup.
+                    </p>
+                    <div class="font-mono text-xs text-pink-400/80 flex items-center gap-1.5">
+                        <span>X / Twitter</span> • <span>Instagram Reels</span> • <span>Facebook & YouTube</span>
+                    </div>
+                </div>
+
+                <!-- Feature 5: Zero Delay Direct IO -->
+                <div class="glass-card rounded-2xl p-8 border border-slate-800 hover:border-yellow-500/40 transition-all group">
+                    <div class="w-12 h-12 rounded-xl bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center text-yellow-400 text-2xl mb-6 group-hover:scale-110 transition-transform">
+                        🚀
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-3 group-hover:text-yellow-400 transition-colors">
+                        Zero-Delay Direct Random-Access I/O
+                    </h3>
+                    <p class="text-slate-400 text-sm leading-relaxed mb-4">
+                        Pre-allocates sparse physical disk space upon start. Worker threads stream byte offsets directly into the destination file via thread-safe OS file descriptors, completely eliminating post-download concatenation delays.
+                    </p>
+                    <div class="font-mono text-xs text-yellow-400/80 flex items-center gap-1.5">
+                        <span>Pre-Allocation</span> • <span>Instant File Finalization</span>
+                    </div>
+                </div>
+
+                <!-- Feature 6: Bandwidth Regulator & Cryptographic Integrity -->
+                <div class="glass-card rounded-2xl p-8 border border-slate-800 hover:border-blue-500/40 transition-all group">
+                    <div class="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 text-2xl mb-6 group-hover:scale-110 transition-transform">
+                        🛡️
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-3 group-hover:text-blue-400 transition-colors">
+                        Bandwidth Limiter & Checksum Verifier
+                    </h3>
+                    <p class="text-slate-400 text-sm leading-relaxed mb-4">
+                        Token-bucket traffic shaping prevents ISP throttling and network congestion. Automatic post-download cryptographic hashing verifies file authenticity against SHA-256, SHA-512, SHA-1, and MD5 hashes.
+                    </p>
+                    <div class="font-mono text-xs text-blue-400/80 flex items-center gap-1.5">
+                        <span>Token-Bucket Shaper</span> • <span>SHA-256 Checksum</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Interactive Theme Showcase Section -->
+    <section id="themes" class="py-24 relative z-10 bg-[#080b11]">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-12">
+                <span class="text-xs font-mono font-bold tracking-widest text-cyan-400 uppercase bg-cyan-500/10 px-3 py-1 rounded-full border border-cyan-500/20">CustomTkinter Aesthetics</span>
+                <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mt-4 mb-4">
+                    6 Dynamic Cyber Themes + Animated Matrix Mode
+                </h2>
+                <p class="text-slate-400 text-base">
+                    Switch themes on the fly. Turbo Download Manager dynamically transforms every frame, button, status bar, and canvas with zero restart delay.
+                </p>
+            </div>
+
+            <!-- Theme Selector Buttons -->
+            <div class="flex flex-wrap justify-center gap-3 mb-10" id="themeButtons">
+                <button onclick="switchPreviewTheme('matrix')" class="theme-btn active px-4 py-2 rounded-xl text-xs font-mono font-bold border transition-all flex items-center gap-2 bg-[#00ff41]/20 text-[#00ff41] border-[#00ff41]/60 shadow-lg shadow-[#00ff41]/20">
+                    <span class="w-2.5 h-2.5 rounded-full bg-[#00ff41]"></span> Matrix Digital Rain
+                </button>
+                <button onclick="switchPreviewTheme('dark')" class="theme-btn px-4 py-2 rounded-xl text-xs font-mono font-bold border border-slate-700 bg-slate-900/60 text-slate-300 hover:border-cyan-500 transition-all flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span> Dark Cyber Slate
+                </button>
+                <button onclick="switchPreviewTheme('cyberpunk')" class="theme-btn px-4 py-2 rounded-xl text-xs font-mono font-bold border border-slate-700 bg-slate-900/60 text-slate-300 hover:border-yellow-400 transition-all flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-yellow-400"></span> Cyberpunk 2077
+                </button>
+                <button onclick="switchPreviewTheme('neon')" class="theme-btn px-4 py-2 rounded-xl text-xs font-mono font-bold border border-slate-700 bg-slate-900/60 text-slate-300 hover:border-purple-400 transition-all flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-purple-400"></span> Synthwave Neon
+                </button>
+                <button onclick="switchPreviewTheme('neo_tokyo')" class="theme-btn px-4 py-2 rounded-xl text-xs font-mono font-bold border border-slate-700 bg-slate-900/60 text-slate-300 hover:border-pink-500 transition-all flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-pink-500"></span> Neo Tokyo Aqua
+                </button>
+                <button onclick="switchPreviewTheme('light')" class="theme-btn px-4 py-2 rounded-xl text-xs font-mono font-bold border border-slate-700 bg-slate-900/60 text-slate-300 hover:border-blue-400 transition-all flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-blue-400"></span> Clean Slate Light
+                </button>
+            </div>
+
+            <!-- Interactive UI Simulator Window -->
+            <div id="themePreviewWindow" class="max-w-4xl mx-auto rounded-2xl p-6 border transition-all duration-500 bg-[#0d1117] border-[#00ff41]/50 shadow-2xl shadow-[#00ff41]/10">
+                <div class="flex items-center justify-between border-b pb-4 mb-6" id="themePreviewHeader">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-3.5 h-3.5 rounded-full bg-red-500/80"></span>
+                        <span class="w-3.5 h-3.5 rounded-full bg-yellow-500/80"></span>
+                        <span class="w-3.5 h-3.5 rounded-full bg-green-500/80"></span>
+                        <span class="font-mono text-xs font-bold ml-3" id="themeTitle">Turbo Download Manager - [Matrix Theme Active]</span>
+                    </div>
+                    <div class="font-mono text-xs text-[#00ff41]" id="themeBadge">PHOSPHOR GREEN OBSIDIAN</div>
+                </div>
+
+                <!-- Simulated Download Cards -->
+                <div class="space-y-4">
+                    <!-- Torrent Card Simulation -->
+                    <div class="p-4 rounded-xl border transition-all" id="cardTorrent">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center space-x-2">
+                                <span class="text-base">🧲</span>
+                                <span class="font-bold text-sm font-mono text-white">Debian-12.5.0-amd64-netinst.iso</span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">LEECH ONLY</span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30">Seeds: 142 | Peers: 38</span>
+                            </div>
+                            <span class="font-mono text-xs font-bold text-[#00ff41]" id="card1Speed">34.2 MB/s</span>
+                        </div>
+                        <div class="w-full bg-black/60 h-2.5 rounded-full overflow-hidden mb-2">
+                            <div class="h-full transition-all duration-500 bg-[#00ff41]" id="card1Bar" style="width: 82%;"></div>
+                        </div>
+                        <div class="flex justify-between text-[11px] font-mono text-slate-400">
+                            <span>Progress: 82% (512 MB / 624 MB)</span>
+                            <span>Upload Rate: 0 B/s (Protected)</span>
+                            <span>ETA: 3s</span>
+                        </div>
+                    </div>
+
+                    <!-- YouTube Audio Card Simulation -->
+                    <div class="p-4 rounded-xl border transition-all" id="cardMedia">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center space-x-2">
+                                <span class="text-base">🎵</span>
+                                <span class="font-bold text-sm font-mono text-white">Cyberpunk_Synthwave_OST.mp3</span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">AUDIO (320 kbps)</span>
+                            </div>
+                            <span class="font-mono text-xs font-bold text-cyan-400">18.5 MB/s</span>
+                        </div>
+                        <div class="w-full bg-black/60 h-2.5 rounded-full overflow-hidden mb-2">
+                            <div class="h-full transition-all duration-500 bg-cyan-400" id="card2Bar" style="width: 95%;"></div>
+                        </div>
+                        <div class="flex justify-between text-[11px] font-mono text-slate-400">
+                            <span>Progress: 95% (114 MB / 120 MB)</span>
+                            <span>Muxing: Direct MP3 Extract</span>
+                            <span>ETA: 1s</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Rich Interactive Terminal CLI Section -->
+    <section id="cli" class="py-24 relative z-10 border-t border-slate-800/80 bg-[#0a0e17]/70">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+                <div class="lg:col-span-5">
+                    <span class="text-xs font-mono font-bold tracking-widest text-yellow-400 uppercase bg-yellow-500/10 px-3 py-1 rounded-full border border-yellow-500/20">Rich Terminal TUI</span>
+                    <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mt-4 mb-4">
+                        Full-Featured CLI for Power Users & Servers
+                    </h2>
+                    <p class="text-slate-300 text-sm leading-relaxed mb-6 font-light">
+                        Deploy Turbo Download Manager on headless Linux servers, VPS nodes, or developer terminal workflows. Powered by the Rich Python library with animated multi-segment chunk blocks, real-time speedometers, and interactive dashboards.
+                    </p>
+
+                    <div class="space-y-3 font-mono text-xs">
+                        <div class="p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between">
+                            <span class="text-slate-300">python main.py download &lt;URL&gt; -n 16</span>
+                            <span class="text-cyan-400">Parallel HTTP</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between">
+                            <span class="text-slate-300">python main.py download &lt;magnet:...&gt; --leech-only</span>
+                            <span class="text-emerald-400">Zero Upload P2P</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between">
+                            <span class="text-slate-300">python main.py monitor</span>
+                            <span class="text-yellow-400">Interactive TUI</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between">
+                            <span class="text-slate-300">python main.py --register-protocols</span>
+                            <span class="text-purple-400">Browser Association</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Simulated Rich Terminal Screen -->
+                <div class="lg:col-span-7">
+                    <div class="rounded-2xl bg-[#090d16] border border-slate-800 shadow-2xl p-6 font-mono text-xs text-slate-200">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                            <div class="flex items-center space-x-2">
+                                <span class="w-3 h-3 rounded-full bg-red-500"></span>
+                                <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
+                                <span class="w-3 h-3 rounded-full bg-green-500"></span>
+                                <span class="text-slate-400 ml-2">terminal@turbodm: ~</span>
+                            </div>
+                            <span class="text-cyan-400 text-[10px]">Rich v13.7 Live Renderer</span>
+                        </div>
+
+                        <div class="space-y-2 leading-relaxed text-slate-300">
+                            <p class="text-cyan-400 font-bold">┌─ ⚡ TURBO DOWNLOAD MANAGER v2.0.0 ────────────────────────────────────────┐</p>
+                            <p>│ <span class="text-white font-bold">Target:</span> magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10...      │</p>
+                            <p>│ <span class="text-emerald-400 font-bold">Mode:</span> LEECH ONLY (Zero Seeding) • Sequential Piece Order: ACTIVE     │</p>
+                            <p>└────────────────────────────────────────────────────────────────────────┘</p>
+                            
+                            <p class="pt-2 text-slate-400">Downloading <span class="text-white font-bold">Fedora-Workstation-Live-x86_64-40.iso</span> (2.10 GB):</p>
+                            <p class="text-emerald-400 font-bold">
+                                [ <span class="text-emerald-300">████████████████████████████████</span><span class="text-slate-700">░░░░░░░░</span> ] 80.0%
+                            </p>
+                            
+                            <div class="grid grid-cols-4 gap-2 pt-2 text-[11px] text-slate-400">
+                                <div>Speed: <span class="text-cyan-400 font-bold">52.4 MB/s</span></div>
+                                <div>Downloaded: <span class="text-white font-bold">1.68 GB</span></div>
+                                <div>Seeds/Peers: <span class="text-emerald-400 font-bold">94 / 22</span></div>
+                                <div>ETA: <span class="text-yellow-400 font-bold">00:08</span></div>
+                            </div>
+
+                            <p class="pt-4 text-slate-500 border-t border-slate-800/80">
+                                [✓] Segments 1-12 finished • Segment 13-16 in progress • Direct I/O verified
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Download & Releases Section -->
+    <section id="download" class="py-24 relative z-10 bg-[#080b11]">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-16">
+                <span class="text-xs font-mono font-bold tracking-widest text-cyan-400 uppercase bg-cyan-500/10 px-3 py-1 rounded-full border border-cyan-500/20">Distribution Packages</span>
+                <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mt-4 mb-4">
+                    Install on Windows or Linux
+                </h2>
+                <p class="text-slate-400 text-base">
+                    Stand-alone native installers, portable standalone archives, and universal Linux bootloaders.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                
+                <!-- Windows MSI Card -->
+                <div class="glass-card rounded-2xl p-6 border border-cyan-500/30 flex flex-col justify-between hover:glow-cyan transition-all relative overflow-hidden">
+                    <div class="absolute top-0 right-0 px-3 py-1 bg-cyan-500 text-black font-mono font-bold text-[10px] uppercase rounded-bl-lg">
+                        Recommended
+                    </div>
+                    <div>
+                        <div class="w-12 h-12 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 text-2xl mb-4">
+                            🪟
+                        </div>
+                        <h3 class="text-lg font-bold text-white mb-2">Windows MSI Installer</h3>
+                        <p class="text-slate-400 text-xs mb-4 leading-relaxed">
+                            Full Windows 10/11 installer with Start Menu & Desktop shortcuts, protocol associations, and CLI in PATH.
+                        </p>
+                        <ul class="text-xs font-mono text-slate-300 space-y-1.5 mb-6">
+                            <li class="flex items-center gap-2 text-emerald-400">✓ Standalone 64-bit MSI</li>
+                            <li class="flex items-center gap-2 text-emerald-400">✓ Desktop & Start Shortcuts</li>
+                            <li class="flex items-center gap-2 text-emerald-400">✓ Browser Magnet & .torrent</li>
+                        </ul>
+                    </div>
+                    <a href="../MSI/Turbo Download Manager-2.0.0-win64.msi" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-mono font-bold text-xs uppercase tracking-wider text-center transition-all shadow-lg shadow-cyan-500/25">
+                        Download MSI
+                    </a>
+                </div>
+
+                <!-- Windows Portable ZIP Card -->
+                <div class="glass-card rounded-2xl p-6 border border-slate-800 flex flex-col justify-between hover:border-slate-700 transition-all">
+                    <div>
+                        <div class="w-12 h-12 rounded-xl bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center text-yellow-400 text-2xl mb-4">
+                            📦
+                        </div>
+                        <h3 class="text-lg font-bold text-white mb-2">Windows Portable ZIP</h3>
+                        <p class="text-slate-400 text-xs mb-4 leading-relaxed">
+                            Zero-installation release. Unzip anywhere and launch via Batch or PowerShell bootloaders.
+                        </p>
+                        <ul class="text-xs font-mono text-slate-300 space-y-1.5 mb-6">
+                            <li class="flex items-center gap-2 text-emerald-400">✓ Zero Installation Needed</li>
+                            <li class="flex items-center gap-2 text-emerald-400">✓ Batch & PS1 Launchers</li>
+                            <li class="flex items-center gap-2 text-emerald-400">✓ Self-Contained</li>
+                        </ul>
+                    </div>
+                    <a href="../Distributions/Turbo-Download-Manager-2.0.0-Windows-Portable.zip" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold text-xs uppercase tracking-wider text-center border border-slate-700 hover:border-yellow-400 transition-all">
+                        Download Portable
+                    </a>
+                </div>
+
+                <!-- Firefox Extension Card -->
+                <div class="glass-card rounded-2xl p-6 border border-cyan-500/30 flex flex-col justify-between hover:glow-cyan transition-all relative overflow-hidden">
+                    <div class="absolute top-0 right-0 px-3 py-1 bg-gradient-to-r from-orange-500 to-amber-500 text-black font-mono font-bold text-[10px] uppercase rounded-bl-lg">
+                        New Add-on
+                    </div>
+                    <div>
+                        <div class="w-12 h-12 rounded-xl bg-orange-500/20 border border-orange-500/40 flex items-center justify-center text-orange-400 text-2xl mb-4">
+                            🦊
+                        </div>
+                        <h3 class="text-lg font-bold text-white mb-2">Firefox Extension</h3>
+                        <p class="text-slate-400 text-xs mb-4 leading-relaxed">
+                            Official browser add-on with download auto-interception, video hover capture buttons, and 1-click MP3 audio extract.
+                        </p>
+                        <ul class="text-xs font-mono text-slate-300 space-y-1.5 mb-6">
+                            <li class="flex items-center gap-2 text-emerald-400">✓ Auto-Interception Engine</li>
+                            <li class="flex items-center gap-2 text-emerald-400">✓ Hover Video Overlay</li>
+                            <li class="flex items-center gap-2 text-emerald-400">✓ Ready .xpi & .zip Packages</li>
+                        </ul>
+                    </div>
+                    <div class="flex gap-2">
+                        <a href="../Distributions/Turbo-Download-Manager-Firefox-Extension.xpi" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:opacity-90 text-black font-mono font-bold text-xs uppercase tracking-wider text-center transition-all">
+                            Install .XPI
+                        </a>
+                        <a href="../Distributions/Turbo-Download-Manager-Firefox-Extension.zip" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold text-xs uppercase tracking-wider text-center border border-slate-700 hover:border-orange-400 transition-all">
+                            ZIP
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Linux Package Card -->
+                <div class="glass-card rounded-2xl p-6 border border-slate-800 flex flex-col justify-between hover:border-slate-700 transition-all">
+                    <div>
+                        <div class="w-12 h-12 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400 text-2xl mb-4">
+                            🐧
+                        </div>
+                        <h3 class="text-lg font-bold text-white mb-2">Linux Universal</h3>
+                        <p class="text-slate-400 text-xs mb-4 leading-relaxed">
+                            Tarball & zip for Ubuntu, Debian, Fedora, Arch & openSUSE with auto-setup installer and .desktop entry.
+                        </p>
+                        <ul class="text-xs font-mono text-slate-300 space-y-1.5 mb-6">
+                            <li class="flex items-center gap-2 text-emerald-400">✓ apt, dnf, pacman, zypper</li>
+                            <li class="flex items-center gap-2 text-emerald-400">✓ Isolated Python Venv</li>
+                            <li class="flex items-center gap-2 text-emerald-400">✓ XDG MIME Protocol</li>
+                        </ul>
+                    </div>
+                    <div class="flex gap-2">
+                        <a href="../Distributions/Turbo-Download-Manager-2.0.0-Linux.tar.gz" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold text-xs uppercase tracking-wider text-center border border-slate-700 hover:border-purple-400 transition-all">
+                            Tar.gz
+                        </a>
+                        <a href="../Distributions/Turbo-Download-Manager-2.0.0-Linux.zip" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold text-xs uppercase tracking-wider text-center border border-slate-700 hover:border-purple-400 transition-all">
+                            Zip
+                        </a>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-12 border-t border-slate-800 bg-[#06080d] z-10 relative text-xs text-slate-400">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6">
+            <div class="flex items-center space-x-3">
+                <div class="w-7 h-7 rounded-lg bg-cyan-500 flex items-center justify-center font-mono font-bold text-black text-sm">
+                    ⚡
+                </div>
+                <div>
+                    <span class="font-bold text-white text-sm">Turbo Download Manager</span>
+                    <p class="text-[10px] text-slate-500">Enterprise High-Performance Engine • Open Source under MIT</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-6">
+                <a href="https://github.com/GashWare/Turbo-Download-Manager" target="_blank" class="hover:text-cyan-400 transition-colors">GitHub Repository</a>
+                <a href="https://github.com/GashWare/Turbo-Download-Manager/blob/main/README.md" target="_blank" class="hover:text-cyan-400 transition-colors">Documentation</a>
+                <a href="https://github.com/GashWare/Turbo-Download-Manager/issues" target="_blank" class="hover:text-cyan-400 transition-colors">Issues & Support</a>
+            </div>
+
+            <div>
+                <span>© 2026 GashWare. All Rights Reserved.</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Interactive Scripts -->
+    <script>
+        // 1. Matrix Digital Rain Canvas Animation
+        const canvas = document.getElementById('matrixCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        const chars = '0123456789ABCDEF⚡アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+        const fontSize = 14;
+        let columns = Math.floor(canvas.width / fontSize);
+        let drops = [];
+
+        function initDrops() {
+            columns = Math.floor(canvas.width / fontSize);
+            drops = [];
+            for (let i = 0; i < columns; i++) {
+                drops[i] = Math.random() * -100;
+            }
+        }
+        initDrops();
+        window.addEventListener('resize', initDrops);
+
+        let matrixColor = '#00ff66';
+
+        function drawMatrix() {
+            ctx.fillStyle = 'rgba(8, 11, 17, 0.08)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = matrixColor;
+            ctx.font = fontSize + 'px monospace';
+
+            for (let i = 0; i < drops.length; i++) {
+                const text = chars.charAt(Math.floor(Math.random() * chars.length));
+                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+
+                if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                    drops[i] = 0;
+                }
+                drops[i]++;
+            }
+        }
+        setInterval(drawMatrix, 40);
+
+        // 2. Segment Blocks Simulator
+        const grid = document.getElementById('segmentBlocksGrid');
+        const totalBlocks = 32;
+        for (let i = 0; i < totalBlocks; i++) {
+            const block = document.createElement('div');
+            block.className = 'h-6 rounded bg-emerald-500/80 transition-all duration-300';
+            if (i >= 24) {
+                block.className = 'h-6 rounded bg-cyan-400 animate-pulse';
+            }
+            if (i >= 28) {
+                block.className = 'h-6 rounded bg-slate-800';
+            }
+            grid.appendChild(block);
+        }
+
+        // Live Speed Fluctuation
+        setInterval(() => {
+            const base = 46.0;
+            const variation = (Math.random() * 8).toFixed(1);
+            const speed = (base + parseFloat(variation)).toFixed(1);
+            const speedEl = document.getElementById('simSpeed');
+            if (speedEl) speedEl.innerText = `${speed} MB/s`;
+        }, 1200);
+
+        // 3. Theme Switcher Simulator
+        const themeConfigs = {
+            matrix: {
+                bg: '#0d1117',
+                border: '#00ff41',
+                badgeBg: '#00ff41',
+                badgeText: 'PHOSPHOR GREEN OBSIDIAN',
+                title: 'Turbo Download Manager - [Matrix Theme Active]',
+                accent: '#00ff41',
+                glow: 'shadow-[#00ff41]/20',
+                matrixCol: '#00ff41'
+            },
+            dark: {
+                bg: '#121722',
+                border: '#00f0ff',
+                badgeBg: '#00f0ff',
+                badgeText: 'CYBER SLATE DARK',
+                title: 'Turbo Download Manager - [Dark Cyber Theme]',
+                accent: '#00f0ff',
+                glow: 'shadow-cyan-500/20',
+                matrixCol: '#00f0ff'
+            },
+            cyberpunk: {
+                bg: '#1a1423',
+                border: '#fcee0a',
+                badgeBg: '#fcee0a',
+                badgeText: 'NIGHT CITY CYBERPUNK',
+                title: 'Turbo Download Manager - [Cyberpunk Neon Yellow]',
+                accent: '#fcee0a',
+                glow: 'shadow-yellow-500/20',
+                matrixCol: '#fcee0a'
+            },
+            neon: {
+                bg: '#150f24',
+                border: '#b026ff',
+                badgeBg: '#b026ff',
+                badgeText: 'SYNTHWAVE ELECTRIC PURPLE',
+                title: 'Turbo Download Manager - [Neon Synthwave]',
+                accent: '#b026ff',
+                glow: 'shadow-purple-500/20',
+                matrixCol: '#b026ff'
+            },
+            neo_tokyo: {
+                bg: '#0a192f',
+                border: '#ff007f',
+                badgeBg: '#ff007f',
+                badgeText: 'MIDNIGHT AQUA & CRIMSON',
+                title: 'Turbo Download Manager - [Neo Tokyo Theme]',
+                accent: '#ff007f',
+                glow: 'shadow-pink-500/20',
+                matrixCol: '#ff007f'
+            },
+            light: {
+                bg: '#f8fafc',
+                border: '#0284c7',
+                badgeBg: '#0284c7',
+                badgeText: 'CLEAN SLATE LIGHT',
+                title: 'Turbo Download Manager - [Light Theme]',
+                accent: '#0284c7',
+                glow: 'shadow-blue-500/20',
+                matrixCol: '#0284c7'
+            }
+        };
+
+        function switchPreviewTheme(key) {
+            const config = themeConfigs[key];
+            if (!config) return;
+
+            matrixColor = config.matrixCol;
+
+            // Update Window Styling
+            const win = document.getElementById('themePreviewWindow');
+            win.style.backgroundColor = config.bg;
+            win.style.borderColor = config.border;
+            win.style.boxShadow = `0 20px 50px -10px ${config.border}33`;
+
+            // Update Header & Badge
+            document.getElementById('themeTitle').innerText = config.title;
+            const badge = document.getElementById('themeBadge');
+            badge.innerText = config.badgeText;
+            badge.style.color = config.accent;
+
+            // Update Card 1
+            const card1 = document.getElementById('cardTorrent');
+            card1.style.borderColor = `${config.border}55`;
+            const card1Speed = document.getElementById('card1Speed');
+            card1Speed.style.color = config.accent;
+            const card1Bar = document.getElementById('card1Bar');
+            card1Bar.style.backgroundColor = config.accent;
+
+            // Update Button Highlights
+            const buttons = document.querySelectorAll('.theme-btn');
+            buttons.forEach(btn => {
+                btn.classList.remove('border-cyan-400', 'border-[#00ff41]', 'border-yellow-400', 'border-purple-400', 'border-pink-500', 'border-blue-400', 'bg-slate-800');
+                btn.style.borderColor = '';
+                btn.style.boxShadow = '';
+            });
+            event.currentTarget.style.borderColor = config.border;
+            event.currentTarget.style.boxShadow = `0 0 15px ${config.border}44`;
+        }
+    </script>
+</body>
+</html>
