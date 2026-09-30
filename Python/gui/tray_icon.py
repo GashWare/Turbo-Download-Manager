@@ -7,6 +7,7 @@ to automatically receive and process downloads from browser extensions without s
 from __future__ import annotations
 import os
 import sys
+import time
 import threading
 from typing import Optional, Callable
 from PIL import Image
@@ -133,12 +134,23 @@ class SystemTrayManager:
             self._icon = None
 
     def notify(self, title: str, message: str) -> None:
-        """Sends a notification balloon through the system tray."""
-        if self._icon and self._is_running:
+        """Sends a notification balloon through the system tray in a non-blocking thread."""
+        if not self._icon or not self._is_running:
+            return
+
+        now = time.time()
+        if hasattr(self, "_last_notify_time") and (now - self._last_notify_time < 0.8):
+            return
+        self._last_notify_time = now
+
+        def _send():
             try:
-                self._icon.notify(message, title)
+                if self._icon and self._is_running:
+                    self._icon.notify(message, title)
             except Exception:
                 pass
+
+        threading.Thread(target=_send, daemon=True, name="TrayNotifyWorker").start()
 
     def _handle_show(self) -> None:
         if self.on_show:

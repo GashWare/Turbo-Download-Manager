@@ -159,3 +159,33 @@ class OSUtils:
                 subprocess.Popen(["osascript", "-e", apple_script])
         except Exception:
             pass
+
+    @staticmethod
+    def set_thread_low_priority() -> None:
+        """Sets the current background worker thread to below normal priority to prevent GUI starvation."""
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                from ctypes import wintypes
+                k32 = ctypes.WinDLL('kernel32', use_last_error=True)
+                k32.GetCurrentThread.restype = wintypes.HANDLE
+                k32.SetThreadPriority.argtypes = [wintypes.HANDLE, ctypes.c_int]
+                k32.SetThreadPriority.restype = wintypes.BOOL
+                k32.SetThreadPriority(k32.GetCurrentThread(), -1)  # THREAD_PRIORITY_BELOW_NORMAL
+            except Exception:
+                pass
+
+    @staticmethod
+    def boost_gui_thread_priority() -> None:
+        """Elevates main GUI thread priority so Windows window messages are never starved by background work."""
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                from ctypes import wintypes
+                k32 = ctypes.WinDLL('kernel32', use_last_error=True)
+                k32.GetCurrentThread.restype = wintypes.HANDLE
+                k32.SetThreadPriority.argtypes = [wintypes.HANDLE, ctypes.c_int]
+                k32.SetThreadPriority.restype = wintypes.BOOL
+                k32.SetThreadPriority(k32.GetCurrentThread(), 1)  # THREAD_PRIORITY_ABOVE_NORMAL
+            except Exception:
+                pass

@@ -13,6 +13,7 @@ import requests
 
 from .models import DownloadTask, DownloadStatus
 from .rate_limiter import RateLimiter
+from .os_utils import OSUtils
 
 CHUNK_SIZE = 64 * 1024  # 64 KB
 
@@ -73,6 +74,7 @@ class StreamDownloader:
 
     def _run(self) -> None:
         try:
+            OSUtils.set_thread_low_priority()
             with self._state_lock:
                 self.task.status = DownloadStatus.DOWNLOADING
             if self.on_status_change:

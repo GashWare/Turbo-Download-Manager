@@ -11,6 +11,33 @@ from typing import Optional, Callable
 import yt_dlp
 
 from .models import DownloadTask, DownloadStatus
+from .os_utils import OSUtils
+
+_CACHED_COOKIE_BROWSER = None
+_COOKIE_BROWSER_CHECKED = False
+_COOKIE_LOCK = threading.Lock()
+
+
+def get_cached_cookie_browser():
+    """Detects and caches browser cookies once across all threads to avoid repeated DPAPI freezes."""
+    global _CACHED_COOKIE_BROWSER, _COOKIE_BROWSER_CHECKED
+    with _COOKIE_LOCK:
+        if _COOKIE_BROWSER_CHECKED:
+            return _CACHED_COOKIE_BROWSER
+
+        # Try firefox first as it reads directly without DPAPI decryption locks
+        for b in ("firefox", "chrome", "edge", "brave", "opera"):
+            try:
+                from yt_dlp.cookies import extract_cookies_from_browser
+                jar = extract_cookies_from_browser(b)
+                if jar and len(jar) > 0:
+                    _CACHED_COOKIE_BROWSER = (b,)
+                    break
+            except Exception:
+                continue
+
+        _COOKIE_BROWSER_CHECKED = True
+        return _CACHED_COOKIE_BROWSER
 
 
 class MediaDownloader:
@@ -32,6 +59,7 @@ class MediaDownloader:
 
         self._stop_event = threading.Event()
         self._state_lock = threading.Lock()
+        self._last_progress_notify_time = 0.0
 
     def start(self) -> None:
         self._stop_event.clear()
@@ -65,6 +93,11 @@ class MediaDownloader:
 
         status = d.get("status")
         if status == "downloading":
+            now = time.monotonic()
+            should_notify = (now - self._last_progress_notify_time) >= 0.15
+            if should_notify:
+                self._last_progress_notify_time = now
+
             downloaded = d.get("downloaded_bytes", 0)
             total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
             speed = d.get("speed", 0.0) or 0.0
@@ -84,7 +117,7 @@ class MediaDownloader:
                 self.task.speed_bytes_per_sec = float(speed)
                 self.task.eta_seconds = int(eta) if eta is not None else None
 
-            if self.on_progress:
+            if should_notify and self.on_progress:
                 self.on_progress(self.task)
 
         elif status == "finished":
@@ -102,6 +135,7 @@ class MediaDownloader:
 
     def _run(self) -> None:
         try:
+            OSUtils.set_thread_low_priority()
             with self._state_lock:
                 self.task.status = DownloadStatus.DOWNLOADING
             if self.on_status_change:
@@ -129,19 +163,8 @@ class MediaDownloader:
             try:
                 out_template = os.path.join(temp_dir, f"{base_name}.%(ext)s")
 
-                # Determine optimal concurrency (8-32 parallel fragment streams)
-                frag_conns = min(max(self.task.num_connections or 16, 8), 32)
-
-                cookie_browser = None
-                for b in ("edge", "chrome", "firefox", "brave", "opera"):
-                    try:
-                        from yt_dlp.cookies import extract_cookies_from_browser
-                        jar = extract_cookies_from_browser(b)
-                        if jar and len(jar) > 0:
-                            cookie_browser = (b,)
-                            break
-                    except Exception:
-                        continue
+                # Optimal fragment concurrency (4-8 parallel fragment streams)
+                frag_conns = min(max(self.task.num_connections or 6, 2), 8)
 
                 # Determine requested format & audio-only settings
                 audio_only = bool(getattr(self.task, "audio_only", False))
@@ -164,14 +187,22 @@ class MediaDownloader:
                             target_format = vf
                             break
 
+                class YtDlpQuietLogger:
+                    def debug(self, msg): pass
+                    def info(self, msg): pass
+                    def warning(self, msg): pass
+                    def error(self, msg): pass
+
                 ydl_opts = {
                     "paths": {"home": temp_dir, "temp": temp_dir},
                     "outtmpl": out_template,
                     "progress_hooks": [self._progress_hook],
                     "postprocessor_hooks": [self._postprocessor_hook],
+                    "logger": YtDlpQuietLogger(),
                     "js_runtimes": {"node": {}},
                     "quiet": True,
                     "no_warnings": True,
+                    "no_color": True,
                     "nocheckcertificate": True,
                     "socket_timeout": 20,
                     "retries": 25,
@@ -180,6 +211,16 @@ class MediaDownloader:
                     "buffersize": 2 * 1024 * 1024,
                     "concurrent_fragment_downloads": frag_conns,
                 }
+
+                url_lower = self.task.url.lower()
+                if "youtube.com" in url_lower or "youtu.be" in url_lower:
+                    ydl_opts["allowed_extractors"] = ["youtube", "youtube:playlist", "generic"]
+                elif "twitch.tv" in url_lower:
+                    ydl_opts["allowed_extractors"] = ["twitch", "generic"]
+                elif "tiktok.com" in url_lower:
+                    ydl_opts["allowed_extractors"] = ["tiktok", "generic"]
+                elif "vimeo.com" in url_lower:
+                    ydl_opts["allowed_extractors"] = ["vimeo", "generic"]
 
                 if audio_only:
                     ydl_opts["format"] = "bestaudio/best"
@@ -209,17 +250,31 @@ class MediaDownloader:
                     if target_format == "mp4":
                         ydl_opts["postprocessor_args"] = {"merger": ["-movflags", "+faststart"]}
 
-                if cookie_browser:
-                    ydl_opts["cookiesfrombrowser"] = cookie_browser
-                else:
-                    ydl_opts["extractor_args"] = {
-                        "youtube": {
-                            "player_client": ["android_vr", "web_safari", "web"]
-                        }
+                # Use robust player clients that bypass "page reload" and bot-check interstitials
+                ydl_opts["extractor_args"] = {
+                    "youtube": {
+                        "player_client": ["android", "web"]
                     }
+                }
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(self.task.url, download=True)
+                    try:
+                        info = ydl.extract_info(self.task.url, download=True)
+                    except Exception as extract_err:
+                        # Fallback to cookies if private/age-restricted and standard extraction failed
+                        err_str = str(extract_err).lower()
+                        if any(k in err_str for k in ("sign in", "private", "members", "age")):
+                            cookie_browser = get_cached_cookie_browser()
+                            if cookie_browser:
+                                ydl_opts.pop("extractor_args", None)
+                                ydl_opts["cookiesfrombrowser"] = cookie_browser
+                                with yt_dlp.YoutubeDL(ydl_opts) as ydl_retry:
+                                    info = ydl_retry.extract_info(self.task.url, download=True)
+                            else:
+                                raise
+                        else:
+                            raise
+
                     if info:
                         if custom_name_specified:
                             clean_title = custom_stem
@@ -253,12 +308,7 @@ class MediaDownloader:
                             self.task.downloaded_bytes = actual_size
 
             finally:
-                # Clean up isolated task temp folder and all intermediate fragments
-                try:
-                    if os.path.exists(temp_dir):
-                        shutil.rmtree(temp_dir, ignore_errors=True)
-                except Exception:
-                    pass
+                pass
 
             with self._state_lock:
                 if not self._stop_event.is_set():

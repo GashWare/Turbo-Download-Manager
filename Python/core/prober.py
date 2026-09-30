@@ -205,16 +205,6 @@ def probe_url(
     if check_media and is_likely_media_streaming_url(url_stripped):
         try:
             import yt_dlp
-            cookie_browser = None
-            for b in ("edge", "chrome", "firefox", "brave", "opera"):
-                try:
-                    from yt_dlp.cookies import extract_cookies_from_browser
-                    jar = extract_cookies_from_browser(b)
-                    if jar and len(jar) > 0:
-                        cookie_browser = (b,)
-                        break
-                except Exception:
-                    continue
 
             is_playlist_candidate = is_likely_playlist_url(url_stripped)
             ydl_opts = {
@@ -224,15 +214,12 @@ def probe_url(
                 "socket_timeout": 20,
                 "extract_flat": True if is_playlist_candidate else "in_playlist",
                 "js_runtimes": {"node": {}},
-            }
-            if cookie_browser:
-                ydl_opts["cookiesfrombrowser"] = cookie_browser
-            else:
-                ydl_opts["extractor_args"] = {
+                "extractor_args": {
                     "youtube": {
                         "player_client": ["android_vr", "web_safari", "web"]
                     }
                 }
+            }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url_stripped, download=False)
                 if info:

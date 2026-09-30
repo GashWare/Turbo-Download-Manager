@@ -24,6 +24,7 @@ from urllib3.util.retry import Retry
 
 from .models import DownloadTask, DownloadStatus, Segment
 from .rate_limiter import RateLimiter
+from .os_utils import OSUtils
 
 MIN_BUFFER_SIZE = 64 * 1024       # 64 KB minimum buffer
 MAX_BUFFER_SIZE = 512 * 1024      # 512 KB maximum buffer for high-bandwidth links
@@ -152,6 +153,7 @@ class SegmentDownloader:
     def _run(self) -> None:
         """Main download loop."""
         try:
+            OSUtils.set_thread_low_priority()
             with self._state_lock:
                 self.task.status = DownloadStatus.DOWNLOADING
             if self.on_status_change:
