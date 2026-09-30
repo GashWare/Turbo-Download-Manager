@@ -50,77 +50,178 @@ STATUS_COLOR_KEYS = {
 
 
 class SegmentCanvas(tk.Canvas):
-    """Draws multi-segment block visualizer showing individual connection progress."""
+    """Ultra-fast multi-segment block visualizer using in-place coordinate updates."""
 
-    def __init__(self, master, height: int = 10, theme_palette: Optional[Dict[str, Any]] = None, **kwargs):
+    def __init__(self, master, height: int = 8, theme_palette: Optional[Dict[str, Any]] = None, **kwargs):
         self.palette = theme_palette or get_theme("dark")
         super().__init__(master, height=height, bg=self.palette["card_bg"], highlightthickness=0, **kwargs)
-        self.segments = []
-        self.total_bytes = 0
         self.status = DownloadStatus.QUEUED
         self.progress_pct = 0.0
-        self._last_draw_key = None
-        self.bind("<Configure>", lambda e: self.draw(force=True))
+        
+        p = self.palette
+        self._bg_rect = self.create_rectangle(0, 0, 1, height, fill=p["progress_bg"], outline="")
+        self._fill_rect = self.create_rectangle(0, 0, 0, height, fill=p["progress_fill"], outline="")
+        self._last_w = 0
+        self._last_fill_w = -1
+        self._last_color = None
+        self.bind("<Configure>", self._on_configure)
 
     def set_theme(self, palette: Dict[str, Any]) -> None:
         self.palette = palette
         self.configure(bg=palette["card_bg"])
-        self.draw(force=True)
+        self.itemconfig(self._bg_rect, fill=palette["progress_bg"])
+        self._last_color = None
+        self._update_fill()
+
+    def _on_configure(self, event=None) -> None:
+        w = event.width if event else self.winfo_width()
+        h = event.height if event else (self.winfo_height() or 8)
+        if w > 1:
+            self._last_w = w
+            self.coords(self._bg_rect, 0, 0, w, h)
+            self._update_fill()
 
     def update_segments(self, task: DownloadTask) -> None:
-        seg_snapshot = tuple((s.segment_id, s.downloaded_bytes, s.status) for s in task.segments) if task.segments else ()
-        key = (task.status, task.total_bytes, round(task.progress_pct, 1), seg_snapshot)
-        if key == self._last_draw_key:
+        pct_rounded = round(task.progress_pct, 1)
+        if task.status == self.status and pct_rounded == self.progress_pct:
             return
-        self._last_draw_key = key
-        self.segments = task.segments
-        self.total_bytes = task.total_bytes
         self.status = task.status
-        self.progress_pct = task.progress_pct
-        self.draw()
+        self.progress_pct = pct_rounded
+        self._update_fill()
+
+    def _update_fill(self) -> None:
+        w = self._last_w if self._last_w > 1 else self.winfo_width()
+        if w <= 1:
+            return
+        h = self.winfo_height() or 8
+        filled_w = int(w * (self.progress_pct / 100.0))
+        if filled_w != self._last_fill_w:
+            self.coords(self._fill_rect, 0, 0, filled_w, h)
+            self._last_fill_w = filled_w
+
+        p = self.palette
+        badge_key = STATUS_COLOR_KEYS.get(self.status, "badge_downloading")
+        color = p.get(badge_key, p["progress_fill"])
+        if color != self._last_color:
+            self.itemconfig(self._fill_rect, fill=color)
+            self._last_color = color
 
     def draw(self, force: bool = False) -> None:
         if force:
-            self._last_draw_key = None
-        self.delete("all")
-        w = self.winfo_width()
-        h = self.winfo_height()
-        if w <= 1:
-            return
-
-        p = self.palette
-        badge_color = p.get(STATUS_COLOR_KEYS.get(self.status, "badge_downloading"), p["progress_fill"])
-
-        # Single stream fallback or no segments
-        if not self.segments or self.total_bytes <= 0:
-            filled_w = int(w * (self.progress_pct / 100.0))
-            self.create_rectangle(0, 0, filled_w, h, fill=badge_color, outline="")
-            self.create_rectangle(filled_w, 0, w, h, fill=p["progress_bg"], outline="")
-            return
-
-        # Render individual segment slices
-        x_offset = 0.0
-        for seg in self.segments:
-            seg_w = (seg.total_bytes / self.total_bytes) * w
-            seg_pct = (seg.downloaded_bytes / max(1, seg.total_bytes))
-            filled_seg_w = seg_w * seg_pct
-
-            seg_x_start = x_offset
-            seg_x_end = x_offset + seg_w
-
-            # Background for this segment
-            self.create_rectangle(seg_x_start, 0, seg_x_end, h, fill=p["progress_bg"], outline=p["card_bg"], width=1)
-
-            # Filled portion
-            if filled_seg_w > 0:
-                color = p["completed_fill"] if seg.status == "COMPLETED" else p["progress_fill"] if seg.status == "DOWNLOADING" else p["paused_fill"]
-                self.create_rectangle(seg_x_start, 0, seg_x_start + filled_seg_w, h, fill=color, outline="")
-
-            x_offset += seg_w
+            self._last_fill_w = -1
+            self._last_color = None
+        self._update_fill()
 
 
-class DownloadCard(ctk.CTkFrame):
-    """Interactive card representing a single download item."""
+class FlatLabel(tk.Label):
+    """Lightweight label replacing compound CTkLabel for instant rendering."""
+    def __init__(self, master=None, text="", text_color=None, fg_color=None, font=None, anchor="center", padx=0, pady=0, **kwargs):
+        self._text_color = text_color or "#ffffff"
+        self._fg_color = fg_color or (master["bg"] if master and hasattr(master, "__getitem__") and "bg" in master.keys() else "#1a1b1e")
+        kwargs.pop("corner_radius", None)
+        super().__init__(
+            master,
+            text=text,
+            fg=self._text_color,
+            bg=self._fg_color,
+            font=font or ("Segoe UI", 10),
+            anchor=anchor,
+            padx=padx,
+            pady=pady,
+            **kwargs
+        )
+
+    def configure(self, **kwargs):
+        if "text_color" in kwargs:
+            self._text_color = kwargs.pop("text_color")
+            kwargs["fg"] = self._text_color
+        if "fg_color" in kwargs:
+            self._fg_color = kwargs.pop("fg_color")
+            kwargs["bg"] = self._fg_color
+        kwargs.pop("corner_radius", None)
+        super().configure(**kwargs)
+
+    def cget(self, key):
+        if key == "text_color":
+            return self._text_color
+        if key == "fg_color":
+            return self._fg_color
+        return super().cget(key)
+
+
+class FlatButton(tk.Button):
+    """Ultra-fast flat button replacing heavy compound CTkButton for download cards."""
+    def __init__(self, master=None, text="", fg_color=None, hover_color=None, text_color=None, font=None, command=None, padx=8, pady=2, **kwargs):
+        self._fg_color = fg_color or "#2b2d35"
+        self._hover_color = hover_color or "#383a45"
+        self._text_color = text_color or "#ffffff"
+        kwargs.pop("corner_radius", None)
+        kwargs.pop("border_width", None)
+        kwargs.pop("border_color", None)
+        kwargs.pop("width", None)
+        kwargs.pop("height", None)
+
+        super().__init__(
+            master,
+            text=text,
+            bg=self._fg_color,
+            fg=self._text_color,
+            activebackground=self._hover_color,
+            activeforeground=self._text_color,
+            relief="flat",
+            bd=0,
+            padx=padx,
+            pady=pady,
+            font=font or ("Segoe UI", 9, "bold"),
+            command=command,
+            cursor="hand2",
+            **kwargs
+        )
+        self.bind("<Enter>", self._on_enter, add="+")
+        self.bind("<Leave>", self._on_leave, add="+")
+
+    def _on_enter(self, event=None):
+        try:
+            super().configure(bg=self._hover_color)
+        except Exception:
+            pass
+
+    def _on_leave(self, event=None):
+        try:
+            super().configure(bg=self._fg_color)
+        except Exception:
+            pass
+
+    def configure(self, **kwargs):
+        if "fg_color" in kwargs:
+            self._fg_color = kwargs.pop("fg_color")
+            kwargs["bg"] = self._fg_color
+        if "hover_color" in kwargs:
+            self._hover_color = kwargs.pop("hover_color")
+            kwargs["activebackground"] = self._hover_color
+        if "text_color" in kwargs:
+            self._text_color = kwargs.pop("text_color")
+            kwargs["fg"] = self._text_color
+            kwargs["activeforeground"] = self._text_color
+        kwargs.pop("corner_radius", None)
+        kwargs.pop("border_width", None)
+        kwargs.pop("border_color", None)
+        kwargs.pop("width", None)
+        kwargs.pop("height", None)
+        super().configure(**kwargs)
+
+    def cget(self, key):
+        if key == "fg_color":
+            return self._fg_color
+        if key == "hover_color":
+            return self._hover_color
+        if key == "text_color":
+            return self._text_color
+        return super().cget(key)
+
+
+class DownloadCard(tk.Frame):
+    """High-performance interactive card representing a single download item."""
 
     def __init__(
         self,
@@ -134,12 +235,16 @@ class DownloadCard(ctk.CTkFrame):
         **kwargs
     ):
         self.palette = theme_palette or get_theme("dark")
+        kwargs.pop("corner_radius", None)
+        kwargs.pop("border_width", None)
+        kwargs.pop("border_color", None)
+        kwargs.pop("fg_color", None)
         super().__init__(
             master,
-            corner_radius=12,
-            fg_color=self.palette["card_bg"],
-            border_width=self.palette.get("card_border_width", 1),
-            border_color=self.palette["card_border"],
+            bg=self.palette["card_bg"],
+            highlightbackground=self.palette.get("card_border", "#2a2d36"),
+            highlightcolor=self.palette.get("card_border", "#2a2d36"),
+            highlightthickness=self.palette.get("card_border_width", 1),
             **kwargs
         )
         self.task = task
@@ -153,43 +258,66 @@ class DownloadCard(ctk.CTkFrame):
         self._last_status: Optional[DownloadStatus] = None
         self._last_metrics_text: Optional[str] = None
         self._last_button_mode: Optional[str] = None
+        self._context_menu_widget: Optional[tk.Menu] = None
 
         self._build_ui()
         self._setup_context_menu()
         self.update_task_view(task)
+
+    def configure(self, **kwargs):
+        if "fg_color" in kwargs:
+            kwargs["bg"] = kwargs.pop("fg_color")
+        if "border_color" in kwargs:
+            kwargs["highlightbackground"] = kwargs.pop("border_color")
+            kwargs["highlightcolor"] = kwargs["highlightbackground"]
+        if "border_width" in kwargs:
+            kwargs["highlightthickness"] = kwargs.pop("border_width")
+        kwargs.pop("corner_radius", None)
+        super().configure(**kwargs)
+
+    def cget(self, key: str):
+        if key == "fg_color":
+            return self.cget("bg")
+        if key == "border_color":
+            return self.cget("highlightbackground")
+        if key == "border_width":
+            return self.cget("highlightthickness")
+        return super().cget(key)
 
     def _build_ui(self) -> None:
         self.grid_columnconfigure(1, weight=1)
 
         # Category Icon
         cat_icon = CATEGORY_ICONS.get(self.task.category, "📁")
-        self.icon_label = ctk.CTkLabel(
+        self.icon_label = FlatLabel(
             self,
             text=cat_icon,
-            font=ctk.CTkFont(size=26),
-            width=50
+            font=("Segoe UI", 20),
+            fg_color=self.palette["card_bg"],
+            width=3
         )
         self.icon_label.grid(row=0, column=0, rowspan=3, padx=(12, 8), pady=12)
 
         # Header: Filename & Status Badge
-        header_frame = ctk.CTkFrame(self, fg_color="transparent")
-        header_frame.grid(row=0, column=1, sticky="ew", padx=(0, 12), pady=(10, 2))
-        header_frame.grid_columnconfigure(0, weight=1)
+        self.header_frame = tk.Frame(self, bg=self.palette["card_bg"])
+        self.header_frame.grid(row=0, column=1, sticky="ew", padx=(0, 12), pady=(10, 2))
+        self.header_frame.grid_columnconfigure(0, weight=1)
 
-        self.filename_label = ctk.CTkLabel(
-            header_frame,
+        self.filename_label = FlatLabel(
+            self.header_frame,
             text=self.task.filename or "Initializing...",
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=("Segoe UI", 11, "bold"),
+            fg_color=self.palette["card_bg"],
+            text_color=self.palette["text_primary"],
             anchor="w"
         )
         self.filename_label.grid(row=0, column=0, sticky="w")
 
         badge_key = STATUS_COLOR_KEYS.get(self.task.status, "badge_downloading")
-        self.status_badge = ctk.CTkLabel(
-            header_frame,
+        self.status_badge = FlatLabel(
+            self.header_frame,
             text=self.task.status.value,
-            font=ctk.CTkFont(size=11, weight="bold"),
-            corner_radius=6,
+            font=("Segoe UI", 8, "bold"),
             fg_color=self.palette.get(badge_key, "#555"),
             text_color="#ffffff",
             padx=8,
@@ -197,47 +325,42 @@ class DownloadCard(ctk.CTkFrame):
         )
         self.status_badge.grid(row=0, column=1, sticky="e")
 
-        # Multi-Segment Progress Canvas
-        self.segment_canvas = SegmentCanvas(self, height=8)
+        # Multi-Segment Progress Canvas (in-place coords update)
+        self.segment_canvas = SegmentCanvas(self, height=8, theme_palette=self.palette)
         self.segment_canvas.grid(row=1, column=1, sticky="ew", padx=(0, 12), pady=(4, 6))
 
         # Metrics Row: Size / Speed / ETA / Acceleration Info
-        metrics_frame = ctk.CTkFrame(self, fg_color="transparent")
-        metrics_frame.grid(row=2, column=1, sticky="ew", padx=(0, 12), pady=(0, 10))
-        metrics_frame.grid_columnconfigure(0, weight=1)
+        self.metrics_frame = tk.Frame(self, bg=self.palette["card_bg"])
+        self.metrics_frame.grid(row=2, column=1, sticky="ew", padx=(0, 12), pady=(0, 10))
+        self.metrics_frame.grid_columnconfigure(0, weight=1)
 
-        self.metrics_label = ctk.CTkLabel(
-            metrics_frame,
+        self.metrics_label = FlatLabel(
+            self.metrics_frame,
             text="0 B / 0 B (0%) • 0 B/s • ETA: --:--",
-            font=ctk.CTkFont(size=11),
+            font=("Segoe UI", 9),
             text_color="#a0a5b5",
+            fg_color=self.palette["card_bg"],
             anchor="w"
         )
         self.metrics_label.grid(row=0, column=0, sticky="w")
 
         # Action Buttons Container
-        self.actions_frame = ctk.CTkFrame(metrics_frame, fg_color="transparent")
+        self.actions_frame = tk.Frame(self.metrics_frame, bg=self.palette["card_bg"])
         self.actions_frame.grid(row=0, column=1, sticky="e")
 
         # Action Button (Pause / Resume / Retry)
-        self.btn_action = ctk.CTkButton(
+        self.btn_action = FlatButton(
             self.actions_frame,
             text="Pause",
-            width=65,
-            height=26,
-            font=ctk.CTkFont(size=11, weight="bold"),
             fg_color="#2b2d35",
             hover_color="#383a45",
             command=self._on_action_click
         )
 
         # Open File Button (Direct launch)
-        self.btn_open_file = ctk.CTkButton(
+        self.btn_open_file = FlatButton(
             self.actions_frame,
             text="Open",
-            width=55,
-            height=26,
-            font=ctk.CTkFont(size=11, weight="bold"),
             fg_color="#2ec4b6",
             hover_color="#249c90",
             text_color="#0d1117",
@@ -245,48 +368,42 @@ class DownloadCard(ctk.CTkFrame):
         )
 
         # Open Folder Button (Reveals file in system file explorer)
-        self.btn_open_folder = ctk.CTkButton(
+        self.btn_open_folder = FlatButton(
             self.actions_frame,
             text="Open Folder",
-            width=82,
-            height=26,
-            font=ctk.CTkFont(size=11),
             fg_color="#2b2d35",
             hover_color="#383a45",
             command=self._open_folder
         )
 
         # Details Button
-        self.btn_details = ctk.CTkButton(
+        self.btn_details = FlatButton(
             self.actions_frame,
             text="Details",
-            width=58,
-            height=26,
-            font=ctk.CTkFont(size=11),
             fg_color="#2b2d35",
             hover_color="#383a45",
             command=lambda: self.on_details(self.task)
         )
 
         # Cancel/Delete Button
-        self.btn_cancel = ctk.CTkButton(
+        self.btn_cancel = FlatButton(
             self.actions_frame,
             text="✕",
-            width=28,
-            height=26,
-            font=ctk.CTkFont(size=12, weight="bold"),
             fg_color="#3a1c1c",
             hover_color="#5a2222",
             text_color="#ff6b6b",
             command=lambda: self.on_cancel(self.task)
         )
 
-        for btn in (self.btn_action, self.btn_open_file, self.btn_open_folder, self.btn_details, self.btn_cancel):
-            MatrixButtonAnimator.attach(btn, app_ref=self)
+        # Only attach Matrix hover animations when matrix theme is enabled
+        if self.palette.get("matrix_rain"):
+            for btn in (self.btn_action, self.btn_open_file, self.btn_open_folder, self.btn_details, self.btn_cancel):
+                MatrixButtonAnimator.attach(btn, app_ref=self)
 
     def apply_theme(self, palette: Dict[str, Any]) -> None:
         """Applies a new theme palette dynamically to the card and all its subcomponents."""
         self.palette = palette
+        self._context_menu_widget = None  # Re-create with new colors on next right-click
 
         for b in (self.btn_details, self.btn_open_folder, self.btn_open_file, self.btn_cancel, self.btn_action):
             MatrixButtonAnimator.reset(b)
@@ -296,8 +413,12 @@ class DownloadCard(ctk.CTkFrame):
             border_color=palette["card_border"],
             border_width=palette.get("card_border_width", 1)
         )
-        self.filename_label.configure(text_color=palette["text_primary"])
-        self.metrics_label.configure(text_color=palette["text_secondary"])
+        self.header_frame.configure(bg=palette["card_bg"])
+        self.metrics_frame.configure(bg=palette["card_bg"])
+        self.actions_frame.configure(bg=palette["card_bg"])
+        self.icon_label.configure(fg_color=palette["card_bg"], text_color=palette.get("text_primary", "#ffffff"))
+        self.filename_label.configure(fg_color=palette["card_bg"], text_color=palette["text_primary"])
+        self.metrics_label.configure(fg_color=palette["card_bg"], text_color=palette["text_secondary"])
 
         # Update action buttons colors and borders
         self.btn_details.configure(
@@ -468,9 +589,16 @@ class DownloadCard(ctk.CTkFrame):
         self.segment_canvas.update_segments(task)
 
     def _setup_context_menu(self) -> None:
-        """Configures right-click popup context menu."""
+        """Configures right-click popup context menu binding."""
+        self.bind("<Button-3>", self._show_context_menu)
+        for w in (self.icon_label, self.filename_label, self.metrics_label, self.segment_canvas):
+            w.bind("<Button-3>", self._show_context_menu)
+
+    def _get_context_menu(self) -> tk.Menu:
+        if self._context_menu_widget is not None:
+            return self._context_menu_widget
         p = self.palette
-        self.context_menu = tk.Menu(
+        menu = tk.Menu(
             self,
             tearoff=0,
             bg=p["card_bg"],
@@ -478,29 +606,36 @@ class DownloadCard(ctk.CTkFrame):
             activebackground=p["accent"],
             activeforeground=p["accent_text"]
         )
-        self.context_menu.add_command(label="▶ Resume / Start", command=lambda: self.on_pause_resume(self.task))
-        self.context_menu.add_command(label="⏸ Pause", command=lambda: self.on_pause_resume(self.task))
-        self.context_menu.add_command(label="🔄 Re-download from start", command=self._handle_redownload)
-        self.context_menu.add_separator()
-        self.context_menu.add_command(label="📂 Open File", command=self._open_file)
-        self.context_menu.add_command(label="📁 Open Folder & Reveal", command=self._open_folder)
-        self.context_menu.add_separator()
-        self.context_menu.add_command(label="🔗 Copy Download Link", command=self._copy_link)
-        self.context_menu.add_command(label="📋 Copy Output Path", command=self._copy_path)
-        self.context_menu.add_separator()
-        self.context_menu.add_command(label="📊 Task Inspector & Checksum", command=lambda: self.on_details(self.task))
-        self.context_menu.add_separator()
-        self.context_menu.add_command(label="✕ Delete Download", command=lambda: self.on_cancel(self.task))
+        menu.add_command(label="▶ Resume / Start", command=lambda: self.on_pause_resume(self.task))
+        menu.add_command(label="⏸ Pause", command=lambda: self.on_pause_resume(self.task))
+        menu.add_command(label="🔄 Re-download from start", command=self._handle_redownload)
+        menu.add_separator()
+        menu.add_command(label="📂 Open File", command=self._open_file)
+        menu.add_command(label="📁 Open Folder & Reveal", command=self._open_folder)
+        menu.add_separator()
+        menu.add_command(label="🔗 Copy Download Link", command=self._copy_link)
+        menu.add_command(label="📋 Copy Output Path", command=self._copy_path)
+        menu.add_separator()
+        menu.add_command(label="📊 Task Inspector & Checksum", command=lambda: self.on_details(self.task))
+        menu.add_separator()
+        menu.add_command(label="✕ Delete Download", command=lambda: self.on_cancel(self.task))
+        self._context_menu_widget = menu
+        return menu
 
-        self.bind("<Button-3>", self._show_context_menu)
-        for child in self.winfo_children():
-            child.bind("<Button-3>", self._show_context_menu)
+    @property
+    def context_menu(self) -> tk.Menu:
+        """Backward-compatible property for any tests or references expecting self.context_menu."""
+        return self._get_context_menu()
 
     def _show_context_menu(self, event) -> None:
+        menu = self._get_context_menu()
         try:
-            self.context_menu.tk_popup(event.x_root, event.y_root)
+            menu.tk_popup(event.x_root, event.y_root)
         finally:
-            self.context_menu.grab_release()
+            try:
+                menu.grab_release()
+            except Exception:
+                pass
 
     def _handle_redownload(self) -> None:
         if self.on_redownload:

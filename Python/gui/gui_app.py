@@ -8,7 +8,8 @@ import sys
 import os
 import time
 import threading
-from typing import Dict, Optional, List
+import queue
+from typing import Dict, Optional, List, Callable, Any
 import customtkinter as ctk
 
 # Ensure core and gui packages can be imported
@@ -18,6 +19,7 @@ from core.models import DownloadTask, DownloadStatus, DownloadCategory, Download
 from core.queue_manager import QueueManager
 from core.clipboard_monitor import ClipboardMonitor
 from core.api_server import ApiServer
+from core.os_utils import OSUtils
 from gui.themes import get_theme, normalize_theme_name, get_theme_display_names
 from gui.tray_icon import SystemTrayManager, PYSTRAY_AVAILABLE
 from gui.components.download_card import DownloadCard
@@ -59,7 +61,7 @@ class TurboDownloadApp(ctk.CTk):
         self.geometry("1020x680")
         self.minsize(850, 500)
 
-        # Set Windows AppUserModelID for dedicated taskbar icon & grouping
+        # Set Windows AppUserModelID for dedicated taskbar icon & grouping and boost GUI thread priority
         if sys.platform == "win32":
             try:
                 import ctypes
@@ -67,6 +69,13 @@ class TurboDownloadApp(ctk.CTk):
                 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
             except Exception:
                 pass
+            OSUtils.boost_gui_thread_priority()
+
+        # Lower GIL switch interval to 1ms to ensure GUI event loop never starves behind worker threads
+        try:
+            sys.setswitchinterval(0.001)
+        except Exception:
+            pass
 
         self._set_app_icon()
 
@@ -84,6 +93,10 @@ class TurboDownloadApp(ctk.CTk):
         if self.settings.clipboard_monitoring:
             self.clipboard_monitor.start()
 
+        # Thread-safe UI event queue for background workers
+        self._ui_event_queue = queue.Queue()
+        self._check_ui_queue()
+
         # Subscribe to QueueManager events
         self.qm.add_listener(self._on_queue_event)
 
@@ -97,14 +110,14 @@ class TurboDownloadApp(ctk.CTk):
 
         # System Tray Notification Area Manager
         self.tray_manager = SystemTrayManager(
-            on_show=lambda: self.after(0, self._show_from_tray),
-            on_add_download=lambda: self.after(0, self._tray_add_download),
-            on_pause_all=lambda: self.after(0, self._tray_pause_all),
-            on_resume_all=lambda: self.after(0, self._tray_resume_all),
-            on_clear_inactive=lambda: self.after(0, self._clear_inactive_downloads),
-            on_clear_all=lambda: self.after(0, self._clear_all_downloads),
-            on_settings=lambda: self.after(0, self._tray_settings),
-            on_exit=lambda: self.after(0, self._exit_application),
+            on_show=lambda: self.run_on_ui_thread(self._show_from_tray),
+            on_add_download=lambda: self.run_on_ui_thread(self._tray_add_download),
+            on_pause_all=lambda: self.run_on_ui_thread(self._tray_pause_all),
+            on_resume_all=lambda: self.run_on_ui_thread(self._tray_resume_all),
+            on_clear_inactive=lambda: self.run_on_ui_thread(self._clear_inactive_downloads),
+            on_clear_all=lambda: self.run_on_ui_thread(self._clear_all_downloads),
+            on_settings=lambda: self.run_on_ui_thread(self._tray_settings),
+            on_exit=lambda: self.run_on_ui_thread(self._exit_application),
         )
         if PYSTRAY_AVAILABLE:
             self.tray_manager.start()
@@ -317,6 +330,7 @@ class TurboDownloadApp(ctk.CTk):
             command=self._clear_inactive_downloads
         )
         self.btn_clear_inactive.pack(fill="x", pady=2)
+        self.btn_clear = self.btn_clear_inactive
 
         self.btn_clear_all = ctk.CTkButton(
             self.sidebar_actions,
@@ -399,7 +413,6 @@ class TurboDownloadApp(ctk.CTk):
         # Dynamic viewport resize listeners for Matrix Digital Rain
         self.bind("<Configure>", self._update_matrix_rain_geometry, add="+")
         self.main_frame.bind("<Configure>", self._update_matrix_rain_geometry, add="+")
-        self.scroll_cards.bind("<Configure>", self._update_matrix_rain_geometry, add="+")
 
         # ==========================================
         # BOTTOM STATUS BAR
@@ -621,10 +634,22 @@ class TurboDownloadApp(ctk.CTk):
         else:
             return task.category.value.lower() == self.current_category.lower()
 
+    def _schedule_refresh(self, delay_ms: int = 80) -> None:
+        """Debounced UI refresh to prevent main thread saturation."""
+        if hasattr(self, "_refresh_timer_id") and self._refresh_timer_id:
+            try:
+                self.after_cancel(self._refresh_timer_id)
+            except Exception:
+                pass
+        self._refresh_timer_id = self.after(delay_ms, self._refresh_downloads_list)
+
     def _refresh_downloads_list(self) -> None:
-        """Re-renders the download card list based on current filters."""
-        # Unpack matrix rain and empty state label first so cards are strictly at the top
-        self.matrix_rain.pack_forget()
+        """Re-renders the download card list incrementally in slices without dropping Tkinter frames."""
+        self._refresh_timer_id = None
+        self._card_render_gen = getattr(self, "_card_render_gen", 0) + 1
+        current_gen = self._card_render_gen
+
+        # Unpack empty state label first
         self.lbl_empty.pack_forget()
 
         all_tasks = self.qm.get_all_tasks()
@@ -632,41 +657,94 @@ class TurboDownloadApp(ctk.CTk):
         all_tasks.sort(key=lambda t: t.created_at, reverse=True)
 
         matching_tasks = [t for t in all_tasks if self._filter_task(t)]
+        matching_ids = {t.task_id for t in matching_tasks}
 
-        # Clear existing card widgets
-        for card in self.card_widgets.values():
-            card.destroy()
-        self.card_widgets.clear()
+        # Remove cards that no longer match or were deleted
+        to_destroy = []
+        for tid in list(self.card_widgets.keys()):
+            if tid not in matching_ids:
+                card = self.card_widgets.pop(tid, None)
+                if card:
+                    try:
+                        card.pack_forget()
+                    except Exception:
+                        pass
+                    to_destroy.append(card)
 
-        # Pack download cards towards the top
-        for task in matching_tasks:
-            card = DownloadCard(
-                self.scroll_cards,
-                task=task,
-                on_pause_resume=self._handle_pause_resume,
-                on_cancel=self._handle_cancel,
-                on_details=self._handle_details,
-                on_redownload=self._handle_redownload,
-                theme_palette=self.active_palette
-            )
-            card.pack(side="top", fill="x", pady=5, padx=5)
-            self.card_widgets[task.task_id] = card
+        if to_destroy:
+            self._schedule_widget_destruction(to_destroy)
 
-        # In Matrix theme, pack Matrix Digital Rain in all the remaining empty space under the downloads
-        if self.active_palette.get("matrix_rain"):
-            self.matrix_rain.configure(bg=self.active_palette["bg_main"])
-            self.matrix_rain.pack(side="top", fill="both", expand=True, padx=2, pady=4)
-            self._update_matrix_rain_geometry()
-            self.matrix_rain.start()
-        else:
-            self.matrix_rain.stop()
-            self.matrix_rain.pack_forget()
-            if not matching_tasks:
+        # Collect new tasks to instantiate (skip re-updating existing cards to avoid redundant redraws)
+        to_create = [task for task in matching_tasks if task.task_id not in self.card_widgets]
+
+        if not matching_tasks:
+            if not self.active_palette.get("matrix_rain"):
                 self.lbl_empty.pack(side="top", pady=60)
+            self._update_matrix_rain_geometry()
+            return
+
+        # Incrementally instantiate and pack new cards with a strict frame budget
+        # to ensure the Tkinter main thread and OS message pump remain 100% responsive.
+        if to_create:
+            self.after(5, lambda: self._process_card_creation_queue(to_create, current_gen, chunk_size=1))
+        else:
+            self._update_matrix_rain_geometry()
+
+    def _schedule_widget_destruction(self, widgets: list, chunk_size: int = 8) -> None:
+        """Asynchronously destroys widget hierarchies in small slices so UI thread never drops frames."""
+        if not widgets:
+            return
+        chunk = widgets[:chunk_size]
+        rem = widgets[chunk_size:]
+        for w in chunk:
+            try:
+                w.destroy()
+            except Exception:
+                pass
+        if rem:
+            self.after(10, lambda: self._schedule_widget_destruction(rem, chunk_size))
+
+    def _process_card_creation_queue(self, remaining_tasks: list, generation: int, chunk_size: int = 1) -> None:
+        if generation != getattr(self, "_card_render_gen", 0):
+            return
+
+        if not remaining_tasks:
+            self._update_matrix_rain_geometry()
+            return
+
+        t_start = time.perf_counter()
+        idx = 0
+        while idx < len(remaining_tasks):
+            task = remaining_tasks[idx]
+            idx += 1
+            if task.task_id not in self.card_widgets:
+                card = DownloadCard(
+                    self.scroll_cards,
+                    task=task,
+                    on_pause_resume=self._handle_pause_resume,
+                    on_cancel=self._handle_cancel,
+                    on_details=self._handle_details,
+                    on_redownload=self._handle_redownload,
+                    theme_palette=self.active_palette
+                )
+                card.pack(side="top", fill="x", pady=5, padx=5)
+                self.card_widgets[task.task_id] = card
+
+            # Enforce 8ms frame budget: max 1-2 cards per slice for 60 FPS fluidity
+            if idx >= chunk_size or (time.perf_counter() - t_start) >= 0.008:
+                break
+
+        rest = remaining_tasks[idx:]
+        if rest:
+            self.after(16, lambda: self._process_card_creation_queue(rest, generation, chunk_size))
+        else:
+            self._update_matrix_rain_geometry()
 
     def _update_matrix_rain_geometry(self, event=None) -> None:
-        """Dynamically expands matrix rain canvas height to fill all remaining empty viewport space."""
+        """Dynamically expands matrix rain canvas height or sleeps it when downloads fill the viewport."""
         if not self.active_palette.get("matrix_rain"):
+            self.matrix_rain.stop()
+            self.matrix_rain.pack_forget()
             return
         try:
             viewport_h = self.main_frame.winfo_height()
@@ -679,18 +757,32 @@ class TurboDownloadApp(ctk.CTk):
                     ch = card.winfo_height()
                     cards_total_h += ch if ch > 10 else 105
 
-            needed_h = max(500, viewport_h - cards_total_h - 15)
-            if abs(self.matrix_rain.winfo_height() - needed_h) > 10:
-                self.matrix_rain.configure(height=needed_h)
+            needed_h = viewport_h - cards_total_h - 15
+            if needed_h > 40:
+                # Viewport has empty space under cards: expand canvas and run animation
+                if abs(self.matrix_rain.winfo_height() - needed_h) > 10:
+                    self.matrix_rain.configure(height=needed_h)
+                if not self.matrix_rain.winfo_ismapped():
+                    self.matrix_rain.configure(bg=self.active_palette["bg_main"])
+                    self.matrix_rain.pack(side="top", fill="both", expand=True, padx=2, pady=4)
+                self.matrix_rain.start()
+            else:
+                # Cards fill viewport: pause animation to save 100% background CPU/GPU
+                self.matrix_rain.stop()
+                self.matrix_rain.pack_forget()
         except Exception:
             pass
 
     def _ui_tick(self) -> None:
         """Periodic UI updates for live progress, speed metrics, animations, and counts."""
         try:
-            all_tasks = self.qm.get_all_tasks()
-            total_speed = sum(t.speed_bytes_per_sec for t in all_tasks if t.status == DownloadStatus.DOWNLOADING)
-            active_count = sum(1 for t in all_tasks if t.status in (DownloadStatus.DOWNLOADING, DownloadStatus.CONNECTING))
+            stats = self.qm.get_stats()
+            total_speed = stats["total_speed"]
+            active_count = stats["active_count"]
+            all_count = stats["total_count"]
+            active_downloading = stats["active_downloading"]
+            active_connecting = stats["active_connecting"]
+            active_errors = stats["active_errors"]
 
             # Pulse animation on active transfer
             self._pulse_count = getattr(self, "_pulse_count", 0) + 1
@@ -709,13 +801,9 @@ class TurboDownloadApp(ctk.CTk):
 
             max_dl = self.settings.max_concurrent_downloads
             max_dl_str = "∞" if max_dl <= 0 else str(max_dl)
-            self.lbl_active_info.configure(text=f"Active: {active_count}/{max_dl_str} • Total: {len(all_tasks)}")
+            self.lbl_active_info.configure(text=f"Active: {active_count}/{max_dl_str} • Total: {all_count}")
 
             # Update center status bar message with active operation details
-            active_downloading = [t for t in all_tasks if t.status == DownloadStatus.DOWNLOADING]
-            active_connecting = [t for t in all_tasks if t.status == DownloadStatus.CONNECTING]
-            active_errors = [t for t in all_tasks if t.status == DownloadStatus.ERROR]
-
             if active_downloading:
                 top_t = active_downloading[0]
                 fname_str = (top_t.filename[:32] + "...") if len(top_t.filename) > 32 else (top_t.filename or "Downloading")
@@ -768,39 +856,59 @@ class TurboDownloadApp(ctk.CTk):
                     text_color=self.active_palette.get("text_muted", "#6c757d")
                 )
 
-            # Update visible download cards
-            for task in all_tasks:
+            # Update only active download cards to keep Tkinter event loop 100% smooth and responsive
+            for task in (active_downloading + active_connecting):
                 if task.task_id in self.card_widgets:
                     self.card_widgets[task.task_id].update_task_view(task)
 
-            self.after(200, self._ui_tick)
+            self.after(250, self._ui_tick)
         except Exception:
             pass
 
-    def _on_queue_event(self, event: str, task: DownloadTask) -> None:
+    def run_on_ui_thread(self, callback: Callable, *args, **kwargs) -> None:
+        """Thread-safe enqueueing of UI operations from any background worker thread."""
+        self._ui_event_queue.put((callback, args, kwargs))
+
+    def _check_ui_queue(self) -> None:
+        """Drains the thread-safe queue on the main UI thread with a strict frame time budget."""
+        try:
+            t_start = time.perf_counter()
+            while not self._ui_event_queue.empty() and (time.perf_counter() - t_start < 0.008):
+                cb, args, kwargs = self._ui_event_queue.get_nowait()
+                try:
+                    cb(*args, **kwargs)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        finally:
+            if not getattr(self, "_force_exit", False):
+                try:
+                    self.after(16, self._check_ui_queue)
+                except Exception:
+                    pass
+
+    def _on_queue_event(self, event: str, task: Optional[DownloadTask] = None) -> None:
         """Handles background events from QueueManager on UI thread."""
+        if event == "progress":
+            return  # Handled smoothly by periodic _ui_tick! Prevents Tkinter mainloop saturation.
+
         def apply_event():
-            if event == "task_added":
-                self._refresh_downloads_list()
-            elif event == "task_removed":
-                self._refresh_downloads_list()
+            if event in ("task_added", "task_removed"):
+                self._schedule_refresh(delay_ms=80)
             elif event in ("status_changed", "error"):
-                if task.task_id in self.card_widgets:
+                if task and task.task_id in self.card_widgets:
                     self.card_widgets[task.task_id].update_task_view(task)
-                else:
-                    self._refresh_downloads_list()
             elif event == "completed":
-                if task.task_id in self.card_widgets:
+                if task and task.task_id in self.card_widgets:
                     self.card_widgets[task.task_id].update_task_view(task)
-                else:
-                    self._refresh_downloads_list()
-                if hasattr(self, "tray_manager") and self.tray_manager and self.tray_manager.is_running:
+                if task and hasattr(self, "tray_manager") and self.tray_manager and self.tray_manager.is_running:
                     self.tray_manager.notify(
                         "Download Completed",
                         f"Finished: {task.filename}"
                     )
 
-        self.after(0, apply_event)
+        self.run_on_ui_thread(apply_event)
 
     def _handle_pause_resume(self, task: DownloadTask) -> None:
         if task.status == DownloadStatus.DOWNLOADING:
@@ -912,7 +1020,17 @@ class TurboDownloadApp(ctk.CTk):
         self._refresh_downloads_list()
 
     def _clear_all_downloads(self) -> None:
-        """Removes all tasks from the download queue."""
+        """Removes all tasks from the download queue with instantaneous UI response."""
+        self._card_render_gen = getattr(self, "_card_render_gen", 0) + 1
+        old_cards = list(self.card_widgets.values())
+        self.card_widgets.clear()
+        for card in old_cards:
+            try:
+                card.pack_forget()
+            except Exception:
+                pass
+        if old_cards:
+            self._schedule_widget_destruction(old_cards)
         self.qm.clear_all()
         self._refresh_downloads_list()
 
@@ -925,7 +1043,7 @@ class TurboDownloadApp(ctk.CTk):
             self.lbl_banner.configure(text=f"📋 Detected link: {short_url}")
             self.banner_frame.grid()
 
-        self.after(0, show_banner)
+        self.run_on_ui_thread(show_banner)
 
     def _download_clipboard_url(self) -> None:
         self.banner_frame.grid_remove()
@@ -959,31 +1077,35 @@ class TurboDownloadApp(ctk.CTk):
 
         def async_worker():
             if items and isinstance(items, list):
-                # Batch / Playlist download - process without blocking UI
+                # Batch / Playlist download - process smoothly without blocking UI
                 added_count = 0
-                for item in items:
+                valid_items = [it for it in items if (it.get("url", "").strip() if isinstance(it, dict) else str(it).strip())]
+                total_items = len(valid_items)
+                for idx, item in enumerate(valid_items):
                     item_url = item.get("url", "").strip() if isinstance(item, dict) else str(item).strip()
-                    if not item_url:
-                        continue
                     item_name = item.get("filename", "") if isinstance(item, dict) else None
                     item_audio = item.get("audio_only", audio_only) if isinstance(item, dict) else audio_only
                     is_media = "youtube.com" in item_url.lower() or "youtu.be" in item_url.lower() or item_audio
 
+                    fallback_name = item_name or f"Track_{added_count + 1}.{'mp3' if item_audio else 'mp4'}"
+                    is_last = (idx == total_items - 1)
                     self.qm.create_and_add_task(
                         url=item_url,
-                        filename=item_name or None,
+                        filename=fallback_name,
                         save_path=target_dir,
-                        num_connections=self.settings.default_connections_per_task,
+                        num_connections=min(self.settings.default_connections_per_task, 8),
                         audio_only=item_audio,
                         media_format="mp3" if item_audio else "mp4",
                         is_media_stream=is_media,
                         total_bytes=0 if is_media else None,
                         supports_range=True if is_media else None,
-                        auto_start=auto_start
+                        category=DownloadCategory.AUDIO if item_audio else DownloadCategory.VIDEO,
+                        auto_start=auto_start,
+                        notify=is_last
                     )
                     added_count += 1
 
-                self.after(0, self._refresh_downloads_list)
+                self.run_on_ui_thread(self._schedule_refresh)
                 if hasattr(self, "tray_manager") and self.tray_manager and self.tray_manager.is_running:
                     playlist_title = data.get("playlist_title") or subfolder or "Playlist"
                     self.tray_manager.notify(
@@ -1010,9 +1132,10 @@ class TurboDownloadApp(ctk.CTk):
                     is_media_stream=is_media,
                     total_bytes=0 if is_media else None,
                     supports_range=True if is_media else None,
+                    category=DownloadCategory.AUDIO if audio_only else (DownloadCategory.VIDEO if is_media else None),
                     auto_start=True
                 )
-                self.after(0, self._refresh_downloads_list)
+                self.run_on_ui_thread(self._schedule_refresh)
 
                 # Non-intrusive tray balloon notification so the user knows the download started in background
                 if hasattr(self, "tray_manager") and self.tray_manager and self.tray_manager.is_running:
@@ -1021,7 +1144,7 @@ class TurboDownloadApp(ctk.CTk):
                         f"Downloading in background: {task.filename or url[:45]}"
                     )
             else:
-                self.after(0, lambda: (self._show_from_tray(), self._open_add_dialog(initial_url=url)))
+                self.run_on_ui_thread(lambda: (self._show_from_tray(), self._open_add_dialog(initial_url=url)))
 
         threading.Thread(target=async_worker, daemon=True, name="ApiAddDownloadWorker").start()
 
@@ -1040,8 +1163,19 @@ class TurboDownloadApp(ctk.CTk):
             self.state("normal")
             self.lift()
             self.attributes("-topmost", True)
-            self.after(200, lambda: self.attributes("-topmost", False))
+            self.after(150, lambda: self.attributes("-topmost", False))
             self.focus_force()
+
+            # On Windows, force foreground activation via Win32 API to bypass OS Foreground Lock
+            if sys.platform == "win32":
+                try:
+                    import ctypes
+                    hwnd = self.winfo_id()
+                    root_hwnd = ctypes.windll.user32.GetAncestor(hwnd, 2) or hwnd
+                    ctypes.windll.user32.ShowWindow(root_hwnd, 9)  # SW_RESTORE = 9
+                    ctypes.windll.user32.SetForegroundWindow(root_hwnd)
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -1102,7 +1236,7 @@ class TurboDownloadApp(ctk.CTk):
             self.destroy()
         except Exception:
             pass
-        sys.exit(0)
+        os._exit(0)
 
 
 def main(initial_url: str = "", start_in_tray: bool = False):

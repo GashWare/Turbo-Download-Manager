@@ -12,7 +12,8 @@ import threading
 from typing import List, Dict, Optional, Callable, Any
 
 from .models import DownloadTask, DownloadStatus, DownloadCategory, DownloadSettings, Segment
-from .prober import probe_url, ProbeResult
+from .categories import categorize_filename
+from .prober import probe_url, ProbeResult, is_likely_media_streaming_url
 from .rate_limiter import RateLimiter
 from .segment_downloader import SegmentDownloader
 from .stream_downloader import StreamDownloader
@@ -43,6 +44,8 @@ class QueueManager:
 
         # Callbacks
         self._listeners: List[Callable[[str, DownloadTask], None]] = []
+        self._save_needed = False
+        self._last_save_time = 0.0
 
         self._load_tasks()
 
@@ -82,6 +85,24 @@ class QueueManager:
     def get_active_count(self) -> int:
         with self._lock:
             return sum(1 for t in self._tasks.values() if t.status in (DownloadStatus.DOWNLOADING, DownloadStatus.CONNECTING))
+
+    def get_stats(self) -> dict:
+        """Returns queue statistics and active tasks in a single lock acquisition."""
+        with self._lock:
+            all_tasks = list(self._tasks.values())
+            active_downloading = [t for t in all_tasks if t.status == DownloadStatus.DOWNLOADING]
+            active_connecting = [t for t in all_tasks if t.status == DownloadStatus.CONNECTING]
+            active_errors = [t for t in all_tasks if t.status == DownloadStatus.ERROR]
+            total_speed = sum(t.speed_bytes_per_sec for t in active_downloading)
+            return {
+                "all_tasks": all_tasks,
+                "total_count": len(all_tasks),
+                "active_count": len(active_downloading) + len(active_connecting),
+                "total_speed": total_speed,
+                "active_downloading": active_downloading,
+                "active_connecting": active_connecting,
+                "active_errors": active_errors
+            }
 
     def _resolve_unique_filename(self, save_dir: str, desired_name: str) -> str:
         """Ensures a unique filename so existing files and queued tasks are never overwritten."""
@@ -125,7 +146,8 @@ class QueueManager:
         download_limit_kbps: Optional[int] = None,
         upload_limit_kbps: Optional[int] = None,
         dht_enabled: Optional[bool] = None,
-        torrent_info_hash: Optional[str] = None
+        torrent_info_hash: Optional[str] = None,
+        notify: bool = True
     ) -> DownloadTask:
         """Initializes task, avoids duplicate network probing if already probed, and adds to queue."""
         save_dir = save_path or self.settings.default_save_dir
@@ -210,7 +232,8 @@ class QueueManager:
             self._tasks[task.task_id] = task
             self._save_tasks()
 
-        self._notify("task_added", task)
+        if notify:
+            self._notify("task_added", task)
 
         if should_start:
             self.start_task(task.task_id)
@@ -226,19 +249,20 @@ class QueueManager:
     ) -> List[DownloadTask]:
         """Adds a list of URLs to the queue in bulk with parallel probing."""
         tasks: List[DownloadTask] = []
-        for url in urls:
-            cleaned = url.strip()
-            if cleaned and cleaned.startswith(("http://", "https://")):
-                try:
-                    task = self.create_and_add_task(
-                        url=cleaned,
-                        save_path=save_path,
-                        num_connections=num_connections,
-                        auto_start=auto_start
-                    )
-                    tasks.append(task)
-                except Exception:
-                    pass
+        valid_urls = [u.strip() for u in urls if u.strip().startswith(("http://", "https://"))]
+        total = len(valid_urls)
+        for idx, cleaned in enumerate(valid_urls):
+            try:
+                task = self.create_and_add_task(
+                    url=cleaned,
+                    save_path=save_path,
+                    num_connections=num_connections,
+                    auto_start=auto_start,
+                    notify=(idx == total - 1)
+                )
+                tasks.append(task)
+            except Exception:
+                pass
         return tasks
 
     def start_task(self, task_id: str) -> bool:
@@ -254,9 +278,10 @@ class QueueManager:
             # If concurrency limit reached, mark as queued
             max_active = self.settings.max_concurrent_downloads
             if max_active > 0 and self.get_active_count() >= max_active:
-                task.status = DownloadStatus.QUEUED
-                self._save_tasks()
-                self._notify("status_changed", task)
+                if task.status != DownloadStatus.QUEUED:
+                    task.status = DownloadStatus.QUEUED
+                    self._save_tasks()
+                    self._notify("status_changed", task)
                 return True
 
             task.status = DownloadStatus.CONNECTING
@@ -375,34 +400,72 @@ class QueueManager:
         return self.start_task(task_id)
 
     def clear_completed(self) -> int:
-        """Removes all completed tasks from the queue."""
+        """Removes all completed tasks from the queue in bulk."""
         with self._lock:
-            completed_ids = [
-                tid for tid, t in self._tasks.items()
+            completed_tasks = [
+                t for t in self._tasks.values()
                 if t.status == DownloadStatus.COMPLETED
             ]
-        for tid in completed_ids:
-            self.remove_task(tid)
-        return len(completed_ids)
+            for t in completed_tasks:
+                self._engines.pop(t.task_id, None)
+                self._tasks.pop(t.task_id, None)
+            self._save_tasks()
+
+        for task in completed_tasks:
+            try:
+                task.delete_meta()
+            except Exception:
+                pass
+
+        if completed_tasks:
+            self._notify("task_removed", None)
+        return len(completed_tasks)
 
     def clear_inactive(self) -> int:
-        """Removes all completed, errored, and cancelled tasks from the queue."""
+        """Removes all completed, errored, and cancelled tasks from the queue in bulk."""
         with self._lock:
-            inactive_ids = [
-                tid for tid, t in self._tasks.items()
+            inactive_tasks = [
+                t for t in self._tasks.values()
                 if t.status in (DownloadStatus.COMPLETED, DownloadStatus.ERROR, DownloadStatus.CANCELLED)
             ]
-        for tid in inactive_ids:
-            self.remove_task(tid)
-        return len(inactive_ids)
+            for t in inactive_tasks:
+                self._engines.pop(t.task_id, None)
+                self._tasks.pop(t.task_id, None)
+            self._save_tasks()
+
+        for task in inactive_tasks:
+            try:
+                task.delete_meta()
+            except Exception:
+                pass
+
+        if inactive_tasks:
+            self._notify("task_removed", None)
+        return len(inactive_tasks)
 
     def clear_all(self) -> int:
-        """Removes all tasks from the queue, cancelling any active engines first."""
+        """Removes all tasks from the queue in bulk, cancelling any active engines first."""
         with self._lock:
-            all_ids = list(self._tasks.keys())
-        for tid in all_ids:
-            self.remove_task(tid)
-        return len(all_ids)
+            engines = list(self._engines.values())
+            self._engines.clear()
+            tasks = list(self._tasks.values())
+            self._tasks.clear()
+            self._save_tasks()
+
+        for engine in engines:
+            try:
+                engine.cancel()
+            except Exception:
+                pass
+
+        for task in tasks:
+            try:
+                task.delete_meta()
+            except Exception:
+                pass
+
+        self._notify("task_removed", None)
+        return len(tasks)
 
     def set_speed_limit(self, bytes_per_sec: int) -> None:
         self.settings.global_speed_limit_bytes_per_sec = bytes_per_sec
@@ -470,10 +533,15 @@ class QueueManager:
         self._notify("completed", task)
 
     def _scheduler_loop(self) -> None:
-        """Background loop to pick queued tasks when slots are free."""
+        """Background loop to pick queued tasks when slots are free and flush debounced state saves."""
         while not self._stop_event.is_set():
             try:
-                time.sleep(1.0)
+                time.sleep(0.5)
+
+                # Check debounced disk save
+                if self._save_needed and (time.time() - self._last_save_time >= 0.5):
+                    self._flush_tasks_to_disk()
+
                 with self._lock:
                     max_active = self.settings.max_concurrent_downloads
                     if max_active <= 0:
@@ -490,13 +558,33 @@ class QueueManager:
             except Exception:
                 pass
 
-    def _save_tasks(self) -> None:
-        """Saves current state of all tasks into database file."""
+    def _flush_tasks_to_disk(self) -> None:
+        """Writes current task list to JSON database without holding long locks."""
         try:
-            with open(self.db_path, "w", encoding="utf-8") as f:
-                json.dump([t.to_dict() for t in self._tasks.values()], f, indent=2)
+            with self._lock:
+                tasks_snapshot = [t.to_dict() for t in self._tasks.values()]
+                self._save_needed = False
+                self._last_save_time = time.time()
+
+            temp_path = f"{self.db_path}.tmp"
+            with open(temp_path, "w", encoding="utf-8") as f:
+                json.dump(tasks_snapshot, f, indent=2)
+            if os.path.exists(self.db_path):
+                try:
+                    os.replace(temp_path, self.db_path)
+                except Exception:
+                    os.remove(self.db_path)
+                    os.rename(temp_path, self.db_path)
+            else:
+                os.rename(temp_path, self.db_path)
         except Exception:
             pass
+
+    def _save_tasks(self, force: bool = False) -> None:
+        """Marks tasks as needing disk save, or flushes immediately if force=True."""
+        self._save_needed = True
+        if force:
+            self._flush_tasks_to_disk()
 
     def _load_tasks(self) -> None:
         """Loads previous tasks from database file."""
@@ -517,5 +605,5 @@ class QueueManager:
     def close(self) -> None:
         self._stop_event.set()
         self.pause_all()
-        self._save_tasks()
+        self._save_tasks(force=True)
         self.settings.save(self.config_path)

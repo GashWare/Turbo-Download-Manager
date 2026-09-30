@@ -127,7 +127,11 @@ class MatrixRainCanvas(tk.Canvas):
             self._render_thread.join(timeout=0.15)
             self._render_thread = None
 
-        self.delete("all")
+        try:
+            if self.winfo_exists():
+                self.delete("all")
+        except Exception:
+            pass
         self._img_item = None
         self._current_photo = None
         with self._lock:

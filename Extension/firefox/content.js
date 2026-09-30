@@ -939,14 +939,24 @@
     card.appendChild(header);
     card.appendChild(body);
     card.appendChild(footer);
+    modal.appendChild(card);
     const mountTarget = document.fullscreenElement || document.webkitFullscreenElement || document.body || document.documentElement;
     mountTarget.appendChild(modal);
 
     // Event handlers
-    closeBtn.addEventListener("click", () => modal.classList.remove("turbodm-modal-visible"));
-    cancelBtn.addEventListener("click", () => modal.classList.remove("turbodm-modal-visible"));
+    closeBtn.addEventListener("click", () => {
+      modal.classList.remove("turbodm-modal-visible");
+      setTimeout(() => { modal.remove(); }, 200);
+    });
+    cancelBtn.addEventListener("click", () => {
+      modal.classList.remove("turbodm-modal-visible");
+      setTimeout(() => { modal.remove(); }, 200);
+    });
     modal.addEventListener("click", (e) => {
-      if (e.target === modal) modal.classList.remove("turbodm-modal-visible");
+      if (e.target === modal) {
+        modal.classList.remove("turbodm-modal-visible");
+        setTimeout(() => { modal.remove(); }, 200);
+      }
     });
 
     // Submit handler
@@ -1012,21 +1022,22 @@
           footer.style.display = "none";
           setTimeout(() => {
             modal.classList.remove("turbodm-modal-visible");
+            setTimeout(() => { try { modal.remove(); } catch (e) {} }, 220);
           }, 2200);
         } else {
           showAppRequiredModal();
           modal.classList.remove("turbodm-modal-visible");
+          setTimeout(() => { try { modal.remove(); } catch (e) {} }, 220);
         }
       }).catch((err) => {
         showAppRequiredModal();
         modal.classList.remove("turbodm-modal-visible");
+        setTimeout(() => { try { modal.remove(); } catch (e) {} }, 220);
       });
     });
 
     // Animate and display modal immediately
     modal.classList.add("turbodm-modal-visible");
-    modal.style.zIndex = "2147483647";
-    modal.style.display = "flex";
   }
 
   /**
