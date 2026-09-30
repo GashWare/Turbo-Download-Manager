@@ -1,0 +1,587 @@
+/* Turbo Download Manager - Video Hover Button Styles */
+
+.turbodm-video-overlay-btn {
+  position: absolute;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #00d2ff;
+  border: 1px solid rgba(0, 210, 255, 0.4);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5), 0 0 10px rgba(0, 210, 255, 0.2);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  transform: translateY(-4px);
+  user-select: none;
+  pointer-events: auto;
+  line-height: 1;
+}
+
+.turbodm-video-overlay-btn.turbodm-visible {
+  opacity: 0.95;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.turbodm-video-overlay-btn:hover {
+  opacity: 1;
+  border-color: #00d2ff;
+  box-shadow: 0 6px 20px rgba(0, 210, 255, 0.4), 0 0 15px rgba(0, 210, 255, 0.4);
+  color: #ffffff;
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+}
+
+.turbodm-video-overlay-btn .turbodm-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.turbodm-video-overlay-btn .turbodm-text {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.turbodm-video-overlay-btn.turbodm-success {
+  background: linear-gradient(135deg, #065f46 0%, #047857 100%) !important;
+  border-color: #10b981 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.5) !important;
+}
+
+/* Audio button sub-action */
+.turbodm-audio-opt {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 2px 5px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  font-size: 10px;
+  color: #94a3b8;
+  transition: all 0.15s ease;
+}
+
+.turbodm-audio-opt:hover {
+  background: rgba(0, 210, 255, 0.3);
+  color: #ffffff;
+}
+
+/* Modal for Desktop Software Required Prompt */
+.turbodm-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.turbodm-modal-overlay.turbodm-modal-visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.turbodm-modal-card {
+  background: #0f172a;
+  border: 1px solid rgba(0, 210, 255, 0.3);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 210, 255, 0.2);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 440px;
+  padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #f8fafc;
+  transform: translateY(-10px);
+  transition: transform 0.2s ease;
+}
+
+.turbodm-modal-overlay.turbodm-modal-visible .turbodm-modal-card {
+  transform: translateY(0);
+}
+
+.turbodm-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.turbodm-modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #00d2ff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.turbodm-modal-close {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.turbodm-modal-close:hover {
+  color: #ffffff;
+}
+
+.turbodm-modal-desc {
+  font-size: 13px;
+  color: #cbd5e1;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.turbodm-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.turbodm-modal-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  border-radius: 8px;
+  font-weight: 600;
+  padding: 10px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.turbodm-modal-btn.primary {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+}
+
+.turbodm-modal-btn.primary:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+}
+
+.turbodm-modal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.turbodm-modal-btn.secondary {
+  background: #1e293b;
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.turbodm-modal-btn.secondary:hover {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: #38bdf8;
+}
+
+.turbodm-modal-link {
+  color: #94a3b8;
+  font-size: 11px;
+  text-align: center;
+  text-decoration: none;
+  margin-top: 4px;
+}
+
+.turbodm-modal-link:hover {
+  color: #00d2ff;
+  text-decoration: underline;
+}
+
+/* =========================================================
+   YouTube Playlist Button & Dedicated Playlist Modal Styles
+   ========================================================= */
+
+.turbodm-yt-playlist-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.85);
+  color: #00d2ff;
+  border: 1px solid rgba(0, 210, 255, 0.4);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4), 0 0 8px rgba(0, 210, 255, 0.2);
+  padding: 6px 12px;
+  border-radius: 18px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  margin: 0 4px;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.turbodm-yt-playlist-btn:hover {
+  background: linear-gradient(135deg, #00d2ff 0%, #3b82f6 100%);
+  color: #050a14;
+  border-color: #00d2ff;
+  box-shadow: 0 4px 15px rgba(0, 210, 255, 0.5), 0 0 12px rgba(0, 210, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.turbodm-yt-playlist-btn .turbodm-pl-icon {
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.turbodm-yt-playlist-btn .turbodm-pl-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Playlist Modal Dialog Container */
+.turbodm-playlist-modal-card {
+  background: #0b1120;
+  border: 1px solid rgba(0, 210, 255, 0.35);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85), 0 0 30px rgba(0, 210, 255, 0.15);
+  border-radius: 14px;
+  width: 92%;
+  max-width: 560px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #f8fafc;
+  transform: translateY(-10px);
+  transition: transform 0.2s ease;
+}
+
+.turbodm-modal-overlay.turbodm-modal-visible .turbodm-playlist-modal-card {
+  transform: translateY(0);
+}
+
+.turbodm-playlist-header {
+  padding: 16px 20px;
+  background: rgba(15, 23, 42, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.turbodm-playlist-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.turbodm-playlist-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #00d2ff;
+  letter-spacing: -0.01em;
+}
+
+.turbodm-playlist-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(0, 210, 255, 0.15);
+  border: 1px solid rgba(0, 210, 255, 0.4);
+  color: #38bdf8;
+  font-family: monospace;
+}
+
+.turbodm-playlist-body {
+  padding: 18px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Playlist Meta Banner */
+.turbodm-pl-meta-banner {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.turbodm-pl-meta-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.turbodm-pl-name-display {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.turbodm-pl-channel-display {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+/* Form Groups & Inputs */
+.turbodm-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.turbodm-form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.turbodm-input-box {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #ffffff;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.turbodm-input-box:focus {
+  border-color: #00d2ff;
+  box-shadow: 0 0 10px rgba(0, 210, 255, 0.25);
+}
+
+.turbodm-form-help {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* Format & Naming Segment Controls */
+.turbodm-segment-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.turbodm-segment-btn {
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.turbodm-segment-btn.active {
+  background: rgba(0, 210, 255, 0.15);
+  border-color: #00d2ff;
+  color: #00d2ff;
+  box-shadow: 0 0 12px rgba(0, 210, 255, 0.2);
+}
+
+.turbodm-segment-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+}
+
+/* Track List Container */
+.turbodm-tracklist-container {
+  background: #070d19;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.turbodm-tracklist-header {
+  padding: 8px 12px;
+  background: #0f172a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.turbodm-toggle-all-btn {
+  background: none;
+  border: none;
+  color: #38bdf8;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.turbodm-toggle-all-btn:hover {
+  background: rgba(56, 189, 248, 0.15);
+}
+
+.turbodm-tracklist-scroll {
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.turbodm-track-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #e2e8f0;
+  transition: background 0.1s ease;
+  user-select: none;
+  cursor: pointer;
+}
+
+.turbodm-track-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.turbodm-track-num {
+  color: #64748b;
+  font-family: monospace;
+  font-size: 11px;
+  min-width: 22px;
+}
+
+.turbodm-track-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.turbodm-track-duration {
+  color: #64748b;
+  font-size: 11px;
+  font-family: monospace;
+}
+
+/* Footer / Actions */
+.turbodm-playlist-footer {
+  padding: 14px 20px;
+  background: rgba(15, 23, 42, 0.95);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.turbodm-btn-submit {
+  flex: 1;
+  background: linear-gradient(135deg, #00d2ff 0%, #0284c7 100%);
+  color: #050a14;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 15px rgba(0, 210, 255, 0.35);
+  transition: all 0.15s ease;
+}
+
+.turbodm-btn-submit:hover {
+  background: linear-gradient(135deg, #38bdf8 0%, #00d2ff 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 210, 255, 0.5);
+}
+
+.turbodm-btn-cancel {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #94a3b8;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.turbodm-btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+}
+
+.turbodm-pl-success-state {
+  padding: 30px 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.turbodm-pl-success-icon {
+  font-size: 42px;
+  animation: pulse 1.5s infinite;
+}
+
+.turbodm-pl-success-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #10b981;
+}
+
+.turbodm-pl-success-desc {
+  font-size: 13px;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
