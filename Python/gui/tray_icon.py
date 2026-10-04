@@ -96,7 +96,7 @@ class SystemTrayManager:
             if sys.platform == "win32":
                 try:
                     import ctypes
-                    myappid = "turbodm.downloadmanager.accelerator.2.0"
+                    myappid = "turbodm.downloadmanager.accelerator.2.0.2"
                     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
                 except Exception:
                     pass

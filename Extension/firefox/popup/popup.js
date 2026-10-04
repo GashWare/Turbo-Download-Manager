@@ -22,6 +22,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const toggleIntercept = document.getElementById("toggleIntercept");
   const toggleHover = document.getElementById("toggleHover");
+  const hoverSubSettings = document.getElementById("hoverSubSettings");
+  const hoverDurationSlider = document.getElementById("hoverDurationSlider");
+  const hoverDurationBadge = document.getElementById("hoverDurationBadge");
+  const toggleIgnorePreviews = document.getElementById("toggleIgnorePreviews");
   const toggleAutoStart = document.getElementById("toggleAutoStart");
   const toggleDevMode = document.getElementById("toggleDevMode");
 
@@ -29,6 +33,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   const apiHostInput = document.getElementById("apiHostInput");
   const saveApiHostBtn = document.getElementById("saveApiHostBtn");
   const devLogOutput = document.getElementById("devLogOutput");
+
+  function updateDurationBadge(val) {
+    const num = parseInt(val, 10);
+    if (num === 0) {
+      hoverDurationBadge.textContent = "0s (Off)";
+      hoverDurationBadge.title = "Button stays visible while mouse is hovering video";
+    } else {
+      hoverDurationBadge.textContent = `${num}s`;
+      hoverDurationBadge.title = `Button fades out after ${num} seconds`;
+    }
+  }
 
   const WIN_MSI_URL = "https://github.com/GashWare/Turbo-Download-Manager/raw/main/MSI/Turbo%20Download%20Manager-2.0.0-win64.msi";
   const LINUX_PKG_URL = "https://github.com/GashWare/Turbo-Download-Manager/raw/main/Distributions/Turbo-Download-Manager-2.0.0-Linux.tar.gz";
@@ -89,6 +104,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const config = await api.storage.local.get({
     interceptDownloads: true,
     showVideoOverlay: true,
+    hoverButtonDuration: 10,
+    ignoreYouTubePreviews: true,
     autoStartDownloads: true,
     devMode: false,
     apiHost: "http://127.0.0.1:9669"
@@ -96,6 +113,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   toggleIntercept.checked = config.interceptDownloads;
   toggleHover.checked = config.showVideoOverlay;
+  if (hoverSubSettings) {
+    hoverSubSettings.style.display = config.showVideoOverlay ? "flex" : "none";
+  }
+  const savedDuration = typeof config.hoverButtonDuration === "number" ? config.hoverButtonDuration : 10;
+  if (hoverDurationSlider) {
+    hoverDurationSlider.value = savedDuration;
+    updateDurationBadge(savedDuration);
+  }
+  if (toggleIgnorePreviews) {
+    toggleIgnorePreviews.checked = config.ignoreYouTubePreviews !== false;
+  }
   toggleAutoStart.checked = config.autoStartDownloads;
   toggleDevMode.checked = config.devMode;
   apiHostInput.value = config.apiHost || "http://127.0.0.1:9669";
@@ -110,8 +138,28 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   toggleHover.addEventListener("change", () => {
-    api.storage.local.set({ showVideoOverlay: toggleHover.checked });
+    const isHoverOn = toggleHover.checked;
+    if (hoverSubSettings) {
+      hoverSubSettings.style.display = isHoverOn ? "flex" : "none";
+    }
+    api.storage.local.set({ showVideoOverlay: isHoverOn });
   });
+
+  if (hoverDurationSlider) {
+    hoverDurationSlider.addEventListener("input", () => {
+      updateDurationBadge(hoverDurationSlider.value);
+    });
+    hoverDurationSlider.addEventListener("change", () => {
+      const numVal = parseInt(hoverDurationSlider.value, 10);
+      api.storage.local.set({ hoverButtonDuration: isNaN(numVal) ? 10 : numVal });
+    });
+  }
+
+  if (toggleIgnorePreviews) {
+    toggleIgnorePreviews.addEventListener("change", () => {
+      api.storage.local.set({ ignoreYouTubePreviews: toggleIgnorePreviews.checked });
+    });
+  }
 
   toggleAutoStart.addEventListener("change", () => {
     api.storage.local.set({ autoStartDownloads: toggleAutoStart.checked });

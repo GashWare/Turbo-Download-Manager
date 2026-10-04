@@ -97,7 +97,7 @@ class TorrentDownloader:
         s["dht_bootstrap_nodes"] = "router.bittorrent.com:6881,dht.transmissionbt.com:6881,router.utorrent.com:6881"
 
         # General networking & timeouts
-        s["user_agent"] = "TurboDownloadManager/2.0"
+        s["user_agent"] = "TurboDownloadManager/2.0.2"
         s["peer_connect_timeout"] = 10
         s["connections_limit"] = max(getattr(self.task, "max_peers", 100) * 2, 200)
 

@@ -95,7 +95,7 @@ executables = [
 
 setup(
     name="Turbo Download Manager",
-    version="2.0.0",
+    version="2.0.2",
     author="Turbo DM Team",
     description="Accelerated Multi-Connection Download Engine",
     options={

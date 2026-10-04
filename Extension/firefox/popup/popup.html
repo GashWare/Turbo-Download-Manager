@@ -97,6 +97,38 @@
         </label>
       </div>
 
+      <!-- Video Hover Button Sub-Settings -->
+      <div id="hoverSubSettings" class="sub-settings-card" style="display: none;">
+        <!-- Button Display Length Slider -->
+        <div class="sub-setting-item">
+          <div class="sub-setting-header">
+            <span class="sub-setting-label">Button Display Length</span>
+            <span id="hoverDurationBadge" class="duration-badge">10s</span>
+          </div>
+          <div class="slider-container">
+            <input type="range" id="hoverDurationSlider" min="0" max="60" value="10" step="1" class="custom-range-slider">
+            <div class="slider-ticks">
+              <span>0s (Stay visible)</span>
+              <span>30s</span>
+              <span>60s</span>
+            </div>
+          </div>
+          <span class="sub-setting-desc">Auto-fades button after set time (0s = stay visible while hovering)</span>
+        </div>
+
+        <!-- Ignore YouTube Preview Thumbnails Toggle -->
+        <div class="sub-setting-toggle-row">
+          <div class="sub-setting-toggle-info">
+            <span class="sub-setting-toggle-title">Ignore Preview Thumbnails</span>
+            <span class="sub-setting-desc">Hide button on YouTube hover preview videos</span>
+          </div>
+          <label class="switch switch-sm">
+            <input type="checkbox" id="toggleIgnorePreviews" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
       <div class="toggle-row">
         <div class="toggle-info">
           <span class="toggle-title">Auto-Start Tasks</span>
@@ -142,7 +174,7 @@
     <!-- Footer -->
     <footer class="popup-footer">
       <button id="captureCurrentPageBtn" class="link-btn">⚡ Capture Current Tab Video</button>
-      <div class="footer-version">v2.0.1 • GashWare</div>
+      <div class="footer-version">v2.0.2 • GashWare</div>
     </footer>
 
     <!-- Small & Non-Intrusive Support Note -->

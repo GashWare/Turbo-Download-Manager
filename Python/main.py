@@ -33,7 +33,7 @@ def print_detailed_help():
         console.print()
         console.print(Panel(
             "[bold cyan]⚡ TURBO DOWNLOAD MANAGER[/bold cyan] - [dim]High-Performance Accelerated Engine[/dim]\n"
-            "[bold green]Version 2.0.0[/bold green] • [yellow]Cross-Platform (Windows & Linux)[/yellow]\n"
+            "[bold green]Version 2.0.2[/bold green] • [yellow]Cross-Platform (Windows & Linux)[/yellow]\n"
             "[white]Equipped with both a Modern CustomTkinter GUI and an Interactive Rich Terminal CLI.[/white]",
             title="[bold white]Documentation & Reference Manual[/bold white]",
             border_style="cyan"
@@ -150,7 +150,7 @@ def main():
     elif len(sys.argv) == 2 and sys.argv[1] in ("--help", "-h", "help"):
         print_detailed_help()
     elif len(sys.argv) == 2 and sys.argv[1] in ("--version", "-v"):
-        print("Turbo Download Manager v2.0.0 (High-Performance Engine)")
+        print("Turbo Download Manager v2.0.2 (High-Performance Engine)")
     elif len(sys.argv) == 2 and sys.argv[1] == "--register-protocols":
         from core.protocol_handler import register_all_associations
         m_ok, t_ok = register_all_associations()

@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Turbo Download Manager Integration",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "High-Performance Download Acceleration & Video Capture Integration for Turbo Download Manager.",
   "author": "GashWare",
   "icons": {

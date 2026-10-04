@@ -41,7 +41,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
             resp = {
                 "status": "ok",
                 "app": "Turbo Download Manager",
-                "version": "2.0.0",
+                "version": "2.0.2",
                 "connected": True
             }
             if self.server_ref and self.server_ref.status_callback:

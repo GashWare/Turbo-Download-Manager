@@ -15,16 +15,134 @@
   let overlayBtn = null;
   let activeTarget = null;
   let hideTimer = null;
+  let fadeTimer = null;
   let isOverlayEnabled = true;
+  let hoverButtonDuration = 10;
+  let ignoreYouTubePreviews = true;
   let lastMoveTime = 0;
 
   // Load user configuration
   if (api && api.storage && api.storage.local) {
     try {
-      api.storage.local.get({ showVideoOverlay: true }).then((cfg) => {
-        isOverlayEnabled = cfg ? cfg.showVideoOverlay : true;
+      api.storage.local.get({
+        showVideoOverlay: true,
+        hoverButtonDuration: 10,
+        ignoreYouTubePreviews: true
+      }).then((cfg) => {
+        if (cfg) {
+          isOverlayEnabled = cfg.showVideoOverlay !== false;
+          hoverButtonDuration = typeof cfg.hoverButtonDuration === "number" ? cfg.hoverButtonDuration : 10;
+          ignoreYouTubePreviews = cfg.ignoreYouTubePreviews !== false;
+        }
       }).catch(() => {});
     } catch (e) {}
+
+    // Live update settings without page reload
+    if (api.storage.onChanged) {
+      api.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName === "local") {
+          if (changes.showVideoOverlay !== undefined) {
+            isOverlayEnabled = changes.showVideoOverlay.newValue !== false;
+            if (!isOverlayEnabled && overlayBtn) {
+              cancelAllTimers();
+              overlayBtn.classList.remove("turbodm-visible");
+            }
+          }
+          if (changes.hoverButtonDuration !== undefined) {
+            hoverButtonDuration = typeof changes.hoverButtonDuration.newValue === "number" ? changes.hoverButtonDuration.newValue : 10;
+          }
+          if (changes.ignoreYouTubePreviews !== undefined) {
+            ignoreYouTubePreviews = changes.ignoreYouTubePreviews.newValue !== false;
+          }
+        }
+      });
+    }
+  }
+
+  function cancelAllTimers() {
+    if (hideTimer) {
+      clearTimeout(hideTimer);
+      hideTimer = null;
+    }
+    if (fadeTimer) {
+      clearTimeout(fadeTimer);
+      fadeTimer = null;
+    }
+  }
+
+  function startFadeCountdown(btn, durationSec) {
+    if (!btn) return;
+    if (durationSec <= 0) {
+      // 0 means stay visible indefinitely while mouse is hovering
+      btn.style.transition = "opacity 0.2s ease, transform 0.2s ease";
+      btn.style.opacity = "0.95";
+      return;
+    }
+
+    const totalMs = durationSec * 1000;
+    const fadeMs = Math.min(2500, Math.max(800, totalMs * 0.35));
+    const solidMs = Math.max(0, totalMs - fadeMs);
+
+    btn.style.transition = "opacity 0.2s ease, transform 0.2s ease";
+    btn.style.opacity = "0.95";
+
+    if (fadeTimer) clearTimeout(fadeTimer);
+    fadeTimer = setTimeout(() => {
+      btn.style.transition = `opacity ${fadeMs / 1000}s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s ease`;
+      btn.style.opacity = "0";
+
+      if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => {
+        btn.classList.remove("turbodm-visible");
+        btn.style.opacity = "";
+        btn.style.transition = "";
+      }, fadeMs);
+    }, solidMs);
+  }
+
+  function isYouTubePreviewThumbnail(el) {
+    if (!el) return false;
+    const hostname = window.location.hostname.toLowerCase();
+    if (!hostname.includes("youtube.com")) return false;
+
+    // Check if on a watch page and hovering the main video player
+    const isWatchPage = window.location.pathname.startsWith("/watch") || window.location.pathname.startsWith("/shorts/");
+    const mainPlayer = document.getElementById("movie_player") || document.querySelector("ytd-watch-flexy #player") || document.querySelector("ytd-shorts");
+    if (isWatchPage && mainPlayer && (mainPlayer === el || mainPlayer.contains(el))) {
+      return false; // Main active player, not a preview
+    }
+
+    // Identify YouTube preview elements and containers across home, subscriptions, search, channels, and related sidebar
+    const previewSelectors = [
+      "#inline-preview-player",
+      "#inline-player",
+      "ytd-video-preview",
+      "ytd-thumbnail-overlay-inline-playback-renderer",
+      "ytd-inline-preview-renderer",
+      "ytd-thumbnail",
+      ".ytd-thumbnail",
+      "ytd-rich-grid-media",
+      "ytd-rich-item-renderer",
+      "ytd-grid-video-renderer",
+      "ytd-video-renderer",
+      "ytd-compact-video-renderer",
+      "ytd-reel-item-renderer",
+      "#items ytd-compact-video-renderer",
+      "ytd-rich-shelf-renderer",
+      "ytd-reel-shelf-renderer"
+    ];
+
+    for (const sel of previewSelectors) {
+      if (el.closest && el.closest(sel)) {
+        return true;
+      }
+    }
+
+    if (!isWatchPage) {
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -84,10 +202,9 @@
 
     // Keep visible when mouse enters the button
     overlayBtn.addEventListener("mouseenter", () => {
-      if (hideTimer) {
-        clearTimeout(hideTimer);
-        hideTimer = null;
-      }
+      cancelAllTimers();
+      overlayBtn.style.transition = "opacity 0.2s ease, transform 0.2s ease";
+      overlayBtn.style.opacity = "1";
       overlayBtn.classList.add("turbodm-visible");
     });
 
@@ -436,11 +553,17 @@
   function showOverlayFor(target) {
     if (!isOverlayEnabled || !target) return;
 
+    if (ignoreYouTubePreviews && isYouTubePreviewThumbnail(target)) {
+      return;
+    }
+
     const rect = target.getBoundingClientRect();
     if (rect.width < 120 || rect.height < 70) return; // Ignore tiny elements/icons
 
     const btn = getOrCreateOverlayButton();
     mountButton(btn);
+
+    const isNewTarget = activeTarget !== target;
     activeTarget = target;
 
     const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement);
@@ -454,19 +577,28 @@
     btn.style.top = `${Math.max(10, top)}px`;
     btn.style.left = `${Math.max(10, left)}px`;
 
-    if (hideTimer) {
-      clearTimeout(hideTimer);
-      hideTimer = null;
-    }
+    const isAlreadyVisible = btn.classList.contains("turbodm-visible") && btn.style.opacity !== "0";
 
-    btn.classList.add("turbodm-visible");
+    if (isNewTarget || !isAlreadyVisible) {
+      cancelAllTimers();
+      btn.classList.add("turbodm-visible");
+      startFadeCountdown(btn, hoverButtonDuration);
+    }
   }
 
   function scheduleHide(delay = 600) {
-    if (hideTimer) clearTimeout(hideTimer);
+    cancelAllTimers();
     hideTimer = setTimeout(() => {
       if (overlayBtn) {
-        overlayBtn.classList.remove("turbodm-visible");
+        overlayBtn.style.transition = "opacity 0.25s ease, transform 0.2s ease";
+        overlayBtn.style.opacity = "0";
+        setTimeout(() => {
+          if (overlayBtn && overlayBtn.style.opacity === "0") {
+            overlayBtn.classList.remove("turbodm-visible");
+            overlayBtn.style.opacity = "";
+            overlayBtn.style.transition = "";
+          }
+        }, 250);
       }
     }, delay);
   }
@@ -482,10 +614,7 @@
 
     // If mouse is hovering over the button itself, do not hide
     if (overlayBtn && overlayBtn.contains(e.target)) {
-      if (hideTimer) {
-        clearTimeout(hideTimer);
-        hideTimer = null;
-      }
+      cancelAllTimers();
       return;
     }
 
@@ -750,7 +879,10 @@
 
     const folderLabel = document.createElement("label");
     folderLabel.className = "turbodm-form-label";
-    folderLabel.innerHTML = "📁 <span>Save Subfolder / Folder Name:</span>";
+    const folderSpan = document.createElement("span");
+    folderSpan.textContent = "Save Subfolder / Folder Name:";
+    folderLabel.textContent = "📁 ";
+    folderLabel.appendChild(folderSpan);
 
     const folderInput = document.createElement("input");
     folderInput.type = "text";
@@ -773,7 +905,10 @@
 
     const formatLabel = document.createElement("label");
     formatLabel.className = "turbodm-form-label";
-    formatLabel.innerHTML = "🎛️ <span>Download Format:</span>";
+    const formatSpan = document.createElement("span");
+    formatSpan.textContent = "Download Format:";
+    formatLabel.textContent = "🎛️ ";
+    formatLabel.appendChild(formatSpan);
 
     const formatGrid = document.createElement("div");
     formatGrid.className = "turbodm-segment-grid";
@@ -782,12 +917,18 @@
     const audioBtn = document.createElement("button");
     audioBtn.type = "button";
     audioBtn.className = "turbodm-segment-btn active";
-    audioBtn.innerHTML = "🎵 <span>Audio Only (MP3 320k)</span>";
+    const audioSpan = document.createElement("span");
+    audioSpan.textContent = "Audio Only (MP3 320k)";
+    audioBtn.textContent = "🎵 ";
+    audioBtn.appendChild(audioSpan);
 
     const videoBtn = document.createElement("button");
     videoBtn.type = "button";
     videoBtn.className = "turbodm-segment-btn";
-    videoBtn.innerHTML = "📹 <span>Full Video (MP4)</span>";
+    const videoSpan = document.createElement("span");
+    videoSpan.textContent = "Full Video (MP4)";
+    videoBtn.textContent = "📹 ";
+    videoBtn.appendChild(videoSpan);
 
     audioBtn.addEventListener("click", () => {
       selectedFormat = "audio";
@@ -813,7 +954,10 @@
 
     const namingLabel = document.createElement("label");
     namingLabel.className = "turbodm-form-label";
-    namingLabel.innerHTML = "🏷️ <span>File Naming Pattern:</span>";
+    const namingSpan = document.createElement("span");
+    namingSpan.textContent = "File Naming Pattern:";
+    namingLabel.textContent = "🏷️ ";
+    namingLabel.appendChild(namingSpan);
 
     const namingSelect = document.createElement("select");
     namingSelect.className = "turbodm-input-box";
@@ -1009,16 +1153,43 @@
         audioOnly: isAudioOnly
       }).then((resp) => {
         if (resp && resp.success) {
-          body.innerHTML = `
-            <div class="turbodm-pl-success-state">
-              <div class="turbodm-pl-success-icon">⚡</div>
-              <div class="turbodm-pl-success-title">Playlist Queued Successfully!</div>
-              <div class="turbodm-pl-success-desc">
-                <strong>${itemsPayload.length} tracks</strong> sent to Turbo Download Manager.<br>
-                Saving to subfolder: <code style="color: #00d2ff; background: rgba(0,210,255,0.1); padding: 2px 6px; border-radius: 4px;">Downloads/${subfolderName}/</code>
-              </div>
-            </div>
-          `;
+          while (body.firstChild) {
+            body.removeChild(body.firstChild);
+          }
+          const successBox = document.createElement("div");
+          successBox.className = "turbodm-pl-success-state";
+
+          const iconEl = document.createElement("div");
+          iconEl.className = "turbodm-pl-success-icon";
+          iconEl.textContent = "⚡";
+          successBox.appendChild(iconEl);
+
+          const titleEl = document.createElement("div");
+          titleEl.className = "turbodm-pl-success-title";
+          titleEl.textContent = "Playlist Queued Successfully!";
+          successBox.appendChild(titleEl);
+
+          const descEl = document.createElement("div");
+          descEl.className = "turbodm-pl-success-desc";
+
+          const strongEl = document.createElement("strong");
+          strongEl.textContent = `${itemsPayload.length} tracks`;
+          descEl.appendChild(strongEl);
+          descEl.appendChild(document.createTextNode(" sent to Turbo Download Manager."));
+          descEl.appendChild(document.createElement("br"));
+          descEl.appendChild(document.createTextNode("Saving to subfolder: "));
+
+          const codeEl = document.createElement("code");
+          codeEl.style.color = "#00d2ff";
+          codeEl.style.background = "rgba(0,210,255,0.1)";
+          codeEl.style.padding = "2px 6px";
+          codeEl.style.borderRadius = "4px";
+          codeEl.textContent = `Downloads/${subfolderName}/`;
+          descEl.appendChild(codeEl);
+
+          successBox.appendChild(descEl);
+          body.appendChild(successBox);
+
           footer.style.display = "none";
           setTimeout(() => {
             modal.classList.remove("turbodm-modal-visible");
@@ -1056,7 +1227,18 @@
         btn.type = "button";
         btn.className = "turbodm-yt-playlist-btn";
         btn.title = "Download Entire Playlist with Turbo DM";
-        btn.innerHTML = `<span class="turbodm-pl-icon" style="pointer-events:none;">⚡</span><span class="turbodm-pl-label" style="pointer-events:none;">Download Playlist</span>`;
+
+        const iconSpan = document.createElement("span");
+        iconSpan.className = "turbodm-pl-icon";
+        iconSpan.style.pointerEvents = "none";
+        iconSpan.textContent = "⚡";
+        btn.appendChild(iconSpan);
+
+        const labelSpan = document.createElement("span");
+        labelSpan.className = "turbodm-pl-label";
+        labelSpan.style.pointerEvents = "none";
+        labelSpan.textContent = "Download Playlist";
+        btn.appendChild(labelSpan);
 
         actionsContainer.insertBefore(btn, actionsContainer.firstChild);
       }
@@ -1071,7 +1253,18 @@
         btn.type = "button";
         btn.className = "turbodm-yt-playlist-btn";
         btn.title = "Download Entire Playlist with Turbo DM";
-        btn.innerHTML = `<span class="turbodm-pl-icon" style="pointer-events:none;">⚡</span><span class="turbodm-pl-label" style="pointer-events:none;">Download Entire Playlist (Turbo DM)</span>`;
+
+        const iconSpan = document.createElement("span");
+        iconSpan.className = "turbodm-pl-icon";
+        iconSpan.style.pointerEvents = "none";
+        iconSpan.textContent = "⚡";
+        btn.appendChild(iconSpan);
+
+        const labelSpan = document.createElement("span");
+        labelSpan.className = "turbodm-pl-label";
+        labelSpan.style.pointerEvents = "none";
+        labelSpan.textContent = "Download Entire Playlist (Turbo DM)";
+        btn.appendChild(labelSpan);
 
         actionsBar.insertBefore(btn, actionsBar.firstChild);
       }
