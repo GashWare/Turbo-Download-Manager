@@ -14,9 +14,10 @@ Python/build/
 Python/dist/
 Python/*.egg-info/
 
-# Unit test / coverage outputs
+# Unit tests (local only)
+tests/
+Python/tests/
 test_outputs/
-Python/tests/test_outputs/
 .pytest_cache/
 .coverage
 htmlcov/

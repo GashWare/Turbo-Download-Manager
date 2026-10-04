@@ -145,10 +145,6 @@ Turbo Download Manager/
     │       ├── details_dialog.py  # Task inspector & hash validator modal
     │       ├── matrix_rain.py     # High-performance Matrix phosphor digital rain canvas & hover animators
     │       └── settings_dialog.py # Preferences, themes, bandwidth limits & protocol association modal
-    └── tests/
-        ├── __init__.py
-        ├── test_downloader.py     # HTTP range, pause/resume, themes, and GUI unit test suite
-        └── test_torrent.py        # BitTorrent, Leech Only mode, and protocol handler test suite
 ```
 
 ---
