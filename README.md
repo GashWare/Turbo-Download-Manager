@@ -90,11 +90,11 @@ An enterprise-grade, high-performance, and feature-rich download accelerator for
 Turbo Download Manager/
 ├── README.md                      # Comprehensive project documentation
 ├── MSI/
-│   └── Turbo Download Manager-2.0.0-win64.msi # Standalone Windows MSI Installer
+│   └── Turbo Download Manager-2.0.2-win64.msi # Standalone Windows MSI Installer
 ├── Distributions/
-│   ├── Turbo-Download-Manager-2.0.0-Windows-Portable.zip # Windows Portable Release
-│   ├── Turbo-Download-Manager-2.0.0-Linux.tar.gz         # Linux Standalone Tarball
-│   └── Turbo-Download-Manager-2.0.0-Linux.zip            # Linux Portable Release
+│   ├── Turbo-Download-Manager-2.0.2-Windows-Portable.zip # Windows Portable Release
+│   ├── Turbo-Download-Manager-2.0.2-Linux.tar.gz         # Linux Standalone Tarball
+│   └── Turbo-Download-Manager-2.0.2-Linux.zip            # Linux Portable Release
 ├── Batch/
 │   ├── install_windows.bat        # Windows automated bootloader & installer
 │   ├── build_msi.bat              # 1-Click MSI compilation script
@@ -159,7 +159,7 @@ Turbo Download Manager/
 
 #### Option A: Native MSI Installer (Recommended)
 Double-click the pre-built installer:
-- **`MSI\Turbo Download Manager-2.0.0-win64.msi`**
+- **`MSI\Turbo Download Manager-2.0.2-win64.msi`**
 - Installs standalone `TurboDownloadManager.exe` and `turbo-cli.exe` with Desktop & Start Menu shortcuts, and registers system `PATH`.
 - Rebuild MSI anytime via `Batch\build_msi.bat` or `PowerShell\build_msi.ps1`.
 

@@ -296,9 +296,9 @@ if (api && api.runtime && api.runtime.onMessage) {
       const osType = request.os || "windows";
       const isLinux = osType === "linux";
       const installerUrl = isLinux
-        ? "https://github.com/GashWare/Turbo-Download-Manager/raw/main/Distributions/Turbo-Download-Manager-2.0.0-Linux.tar.gz"
-        : "https://github.com/GashWare/Turbo-Download-Manager/raw/main/MSI/Turbo%20Download%20Manager-2.0.0-win64.msi";
-      const installerName = isLinux ? "Turbo-Download-Manager-2.0.0-Linux.tar.gz" : "Turbo Download Manager-2.0.0-win64.msi";
+        ? "https://github.com/GashWare/Turbo-Download-Manager/raw/main/Distributions/Turbo-Download-Manager-2.0.2-Linux.tar.gz"
+        : "https://github.com/GashWare/Turbo-Download-Manager/raw/main/MSI/Turbo%20Download%20Manager-2.0.2-win64.msi";
+      const installerName = isLinux ? "Turbo-Download-Manager-2.0.2-Linux.tar.gz" : "Turbo Download Manager-2.0.2-win64.msi";
 
       if (api && api.downloads && api.downloads.download) {
         api.downloads.download({

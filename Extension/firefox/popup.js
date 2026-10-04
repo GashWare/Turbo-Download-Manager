@@ -45,8 +45,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  const WIN_MSI_URL = "https://github.com/GashWare/Turbo-Download-Manager/raw/main/MSI/Turbo%20Download%20Manager-2.0.0-win64.msi";
-  const LINUX_PKG_URL = "https://github.com/GashWare/Turbo-Download-Manager/raw/main/Distributions/Turbo-Download-Manager-2.0.0-Linux.tar.gz";
+  const WIN_MSI_URL = "https://github.com/GashWare/Turbo-Download-Manager/raw/main/MSI/Turbo%20Download%20Manager-2.0.2-win64.msi";
+  const LINUX_PKG_URL = "https://github.com/GashWare/Turbo-Download-Manager/raw/main/Distributions/Turbo-Download-Manager-2.0.2-Linux.tar.gz";
 
   // OS Detection
   function detectOS() {

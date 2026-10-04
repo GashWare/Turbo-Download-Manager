@@ -337,8 +337,8 @@
 
       const isLinux = /linux/i.test(navigator.platform || "") || /linux/i.test(navigator.userAgent || "");
       const primaryUrl = isLinux
-        ? "https://github.com/GashWare/Turbo-Download-Manager/raw/main/Distributions/Turbo-Download-Manager-2.0.0-Linux.tar.gz"
-        : "https://github.com/GashWare/Turbo-Download-Manager/raw/main/MSI/Turbo%20Download%20Manager-2.0.0-win64.msi";
+        ? "https://github.com/GashWare/Turbo-Download-Manager/raw/main/Distributions/Turbo-Download-Manager-2.0.2-Linux.tar.gz"
+        : "https://github.com/GashWare/Turbo-Download-Manager/raw/main/MSI/Turbo%20Download%20Manager-2.0.2-win64.msi";
       const primaryLabel = isLinux ? "🐧 Download for Linux (.tar.gz)" : "🪟 Download for Windows (.msi)";
 
       const card = document.createElement("div");
@@ -377,13 +377,13 @@
       grid.className = "turbodm-modal-grid";
 
       const winBtn = document.createElement("a");
-      winBtn.href = "https://github.com/GashWare/Turbo-Download-Manager/raw/main/MSI/Turbo%20Download%20Manager-2.0.0-win64.msi";
+      winBtn.href = "https://github.com/GashWare/Turbo-Download-Manager/raw/main/MSI/Turbo%20Download%20Manager-2.0.2-win64.msi";
       winBtn.target = "_blank";
       winBtn.className = "turbodm-modal-btn secondary";
       winBtn.textContent = "🪟 Windows Installer";
 
       const linuxBtn = document.createElement("a");
-      linuxBtn.href = "https://github.com/GashWare/Turbo-Download-Manager/raw/main/Distributions/Turbo-Download-Manager-2.0.0-Linux.tar.gz";
+      linuxBtn.href = "https://github.com/GashWare/Turbo-Download-Manager/raw/main/Distributions/Turbo-Download-Manager-2.0.2-Linux.tar.gz";
       linuxBtn.target = "_blank";
       linuxBtn.className = "turbodm-modal-btn secondary";
       linuxBtn.textContent = "🐧 Linux Package";
