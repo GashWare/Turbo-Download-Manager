@@ -214,14 +214,24 @@ def probe_url(
                 "socket_timeout": 20,
                 "extract_flat": True if is_playlist_candidate else "in_playlist",
                 "js_runtimes": {"node": {}},
-                "extractor_args": {
-                    "youtube": {
-                        "player_client": ["android_vr", "web_safari", "web"]
-                    }
-                }
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url_stripped, download=False)
+                try:
+                    info = ydl.extract_info(url_stripped, download=False)
+                except Exception:
+                    # Fallback to cookies if private/restricted
+                    cookie_browser = None
+                    try:
+                        from .media_downloader import get_cached_cookie_browser
+                        cookie_browser = get_cached_cookie_browser()
+                    except Exception:
+                        pass
+                    if cookie_browser:
+                        ydl_opts["cookiesfrombrowser"] = cookie_browser
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl_cookie:
+                            info = ydl_cookie.extract_info(url_stripped, download=False)
+                    else:
+                        raise
                 if info:
                     _type = info.get("_type")
                     entries = info.get("entries")

@@ -250,23 +250,15 @@ class MediaDownloader:
                     if target_format == "mp4":
                         ydl_opts["postprocessor_args"] = {"merger": ["-movflags", "+faststart"]}
 
-                # Use robust player clients that bypass "page reload" and bot-check interstitials
-                ydl_opts["extractor_args"] = {
-                    "youtube": {
-                        "player_client": ["android", "web"]
-                    }
-                }
-
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     try:
                         info = ydl.extract_info(self.task.url, download=True)
                     except Exception as extract_err:
-                        # Fallback to cookies if private/age-restricted and standard extraction failed
                         err_str = str(extract_err).lower()
+                        # Fallback: Retry with browser cookies if private/age-restricted
                         if any(k in err_str for k in ("sign in", "private", "members", "age")):
                             cookie_browser = get_cached_cookie_browser()
                             if cookie_browser:
-                                ydl_opts.pop("extractor_args", None)
                                 ydl_opts["cookiesfrombrowser"] = cookie_browser
                                 with yt_dlp.YoutubeDL(ydl_opts) as ydl_retry:
                                     info = ydl_retry.extract_info(self.task.url, download=True)
