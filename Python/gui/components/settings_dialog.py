@@ -18,7 +18,7 @@ from core.protocol_handler import (
     unregister_torrent_file_association,
     is_torrent_file_associated,
 )
-from gui.themes import get_theme, get_theme_display_names, normalize_theme_name, THEMES
+from gui.themes import get_theme, get_theme_display_names, normalize_theme_name, THEMES, set_window_icon
 
 
 class SettingsDialog(ctk.CTkToplevel):
@@ -41,6 +41,8 @@ class SettingsDialog(ctk.CTkToplevel):
         self.attributes("-topmost", True)
         self.focus_force()
         self.grab_set()
+
+        set_window_icon(self)
 
         # Center on parent
         self.update_idletasks()

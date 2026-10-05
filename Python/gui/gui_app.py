@@ -20,7 +20,7 @@ from core.queue_manager import QueueManager
 from core.clipboard_monitor import ClipboardMonitor
 from core.api_server import ApiServer
 from core.os_utils import OSUtils
-from gui.themes import get_theme, normalize_theme_name, get_theme_display_names
+from gui.themes import get_theme, normalize_theme_name, get_theme_display_names, set_window_icon
 from gui.tray_icon import SystemTrayManager, PYSTRAY_AVAILABLE
 from gui.components.download_card import DownloadCard
 from gui.components.add_dialog import AddDownloadDialog
@@ -143,25 +143,7 @@ class TurboDownloadApp(ctk.CTk):
 
     def _set_app_icon(self) -> None:
         """Sets window titlebar, taskbar, and alt-tab icon across Windows and Linux."""
-        assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
-        ico_path = os.path.join(assets_dir, "app_icon.ico")
-        png_path = os.path.join(assets_dir, "app_icon.png")
-
-        if os.path.exists(ico_path):
-            try:
-                self.iconbitmap(ico_path)
-            except Exception:
-                pass
-
-        if os.path.exists(png_path):
-            try:
-                from PIL import ImageTk, Image
-                img = Image.open(png_path)
-                photo = ImageTk.PhotoImage(img)
-                self.iconphoto(True, photo)
-                self._app_icon_photo = photo  # Preserve reference to prevent garbage collection
-            except Exception:
-                pass
+        set_window_icon(self)
 
     def _build_layout(self) -> None:
         self.grid_columnconfigure(1, weight=1)

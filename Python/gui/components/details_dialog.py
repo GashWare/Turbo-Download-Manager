@@ -12,7 +12,7 @@ import pyperclip
 
 from core.models import DownloadTask, DownloadStatus, format_eta
 from core.checksum import calculate_file_hash
-from gui.themes import get_theme
+from gui.themes import get_theme, set_window_icon
 
 
 def format_bytes(size_bytes: float) -> str:
@@ -42,6 +42,8 @@ class DetailsDialog(ctk.CTkToplevel):
         self.lift()
         self.attributes("-topmost", True)
         self.focus_force()
+
+        set_window_icon(self)
 
         self._build_ui()
         self._refresh_timer()

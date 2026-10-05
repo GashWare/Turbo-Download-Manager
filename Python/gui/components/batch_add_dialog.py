@@ -11,7 +11,7 @@ from tkinter import filedialog
 import pyperclip
 
 from core.models import DownloadSettings
-from gui.themes import get_theme
+from gui.themes import get_theme, set_window_icon
 
 
 class BatchAddDialog(ctk.CTkToplevel):
@@ -31,6 +31,8 @@ class BatchAddDialog(ctk.CTkToplevel):
         self.lift()
         self.attributes("-topmost", True)
         self.grab_set()
+
+        set_window_icon(self)
 
         # Center on parent
         self.update_idletasks()

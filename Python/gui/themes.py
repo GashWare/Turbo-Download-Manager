@@ -270,3 +270,35 @@ def get_theme_display_names() -> list[str]:
 def normalize_theme_name(display_name: str) -> str:
     """Converts a display name like 'Cyberpunk' or 'Neo Tokyo' to internal key 'cyberpunk' or 'neo_tokyo'."""
     return display_name.lower().replace(" ", "_")
+
+
+def set_window_icon(window: Any) -> None:
+    """Sets custom Turbo Download Manager window titlebar and taskbar icon across Windows & Linux."""
+    import os
+    assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+    ico_path = os.path.join(assets_dir, "app_icon.ico")
+    png_path = os.path.join(assets_dir, "app_icon.png")
+
+    def _apply():
+        if os.path.exists(ico_path):
+            try:
+                window.iconbitmap(ico_path)
+            except Exception:
+                pass
+        if os.path.exists(png_path):
+            try:
+                from PIL import ImageTk, Image
+                img = Image.open(png_path)
+                photo = ImageTk.PhotoImage(img)
+                window.iconphoto(True, photo)
+                window._app_icon_photo = photo
+            except Exception:
+                pass
+
+    _apply()
+    # Schedule after 220ms to override CustomTkinter's default 200ms icon timer on CTkToplevel
+    if hasattr(window, "after"):
+        try:
+            window.after(220, _apply)
+        except Exception:
+            pass

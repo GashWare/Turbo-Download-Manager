@@ -14,7 +14,7 @@ import pyperclip
 
 from core.prober import probe_url, ProbeResult, is_likely_media_streaming_url, is_likely_torrent_url
 from core.models import DownloadCategory, DownloadSettings
-from gui.themes import get_theme
+from gui.themes import get_theme, set_window_icon
 
 
 def format_bytes(size_bytes: float) -> str:
@@ -78,6 +78,8 @@ class AddDownloadDialog(ctk.CTkToplevel):
         self.lift()
         self.attributes("-topmost", True)
         self.grab_set()
+
+        set_window_icon(self)
 
         # Center on parent
         self.update_idletasks()
