@@ -608,7 +608,7 @@ class TurboDownloadApp(ctk.CTk):
         if self.current_category == "All":
             return True
         elif self.current_category == "Downloading":
-            return task.status in (DownloadStatus.DOWNLOADING, DownloadStatus.CONNECTING)
+            return task.status in (DownloadStatus.DOWNLOADING, DownloadStatus.CONNECTING, DownloadStatus.CONVERTING)
         elif self.current_category == "Completed":
             return task.status == DownloadStatus.COMPLETED
         elif self.current_category == "Paused":
@@ -789,7 +789,13 @@ class TurboDownloadApp(ctk.CTk):
             if active_downloading:
                 top_t = active_downloading[0]
                 fname_str = (top_t.filename[:32] + "...") if len(top_t.filename) > 32 else (top_t.filename or "Downloading")
-                if top_t.is_torrent:
+                if top_t.status == DownloadStatus.CONVERTING:
+                    target_fmt = (getattr(top_t, "media_format", None) or "MP3").upper()
+                    self.lbl_status_msg.configure(
+                        text=f"🔄 [Transcoding Engine] Converting {fname_str} to {target_fmt} (FFmpeg)... Please wait",
+                        text_color="#a855f7"
+                    )
+                elif top_t.is_torrent:
                     leech_badge = " [Leech Only]" if top_t.leech_only else ""
                     self.lbl_status_msg.configure(
                         text=f"🧲 [P2P Torrent{leech_badge}] {fname_str} • {top_t.progress_pct:.1f}% ({format_bytes(top_t.speed_bytes_per_sec)}/s) • Seeds: {top_t.num_seeds} | Peers: {top_t.num_peers}",

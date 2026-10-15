@@ -124,14 +124,25 @@ class MediaDownloader:
             with self._state_lock:
                 if self.task.total_bytes > 0:
                     self.task.downloaded_bytes = self.task.total_bytes
+                self.task.status = DownloadStatus.CONVERTING
                 self.task.speed_bytes_per_sec = 0.0
-                self.task.eta_seconds = 0
+                self.task.eta_seconds = None
+            if self.on_status_change:
+                self.on_status_change(self.task)
             if self.on_progress:
                 self.on_progress(self.task)
 
     def _postprocessor_hook(self, d: dict) -> None:
         if self._stop_event.is_set():
             raise Exception("Download stopped by user")
+        with self._state_lock:
+            self.task.status = DownloadStatus.CONVERTING
+            self.task.speed_bytes_per_sec = 0.0
+            self.task.eta_seconds = None
+        if self.on_status_change:
+            self.on_status_change(self.task)
+        if self.on_progress:
+            self.on_progress(self.task)
 
     def _run(self) -> None:
         try:
@@ -178,6 +189,10 @@ class MediaDownloader:
                         if ac in raw_fmt:
                             target_format = ac
                             break
+                    if self.task.filename:
+                        bf, _ = os.path.splitext(self.task.filename)
+                        if bf:
+                            self.task.filename = f"{bf}.{target_format}"
                 else:
                     raw_fmt = (getattr(self.task, "media_format", None) or "mp4").lower()
                     video_formats = ("mp4", "mkv", "webm")

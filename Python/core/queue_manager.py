@@ -84,13 +84,13 @@ class QueueManager:
 
     def get_active_count(self) -> int:
         with self._lock:
-            return sum(1 for t in self._tasks.values() if t.status in (DownloadStatus.DOWNLOADING, DownloadStatus.CONNECTING))
+            return sum(1 for t in self._tasks.values() if t.status in (DownloadStatus.DOWNLOADING, DownloadStatus.CONNECTING, DownloadStatus.CONVERTING))
 
     def get_stats(self) -> dict:
         """Returns queue statistics and active tasks in a single lock acquisition."""
         with self._lock:
             all_tasks = list(self._tasks.values())
-            active_downloading = [t for t in all_tasks if t.status == DownloadStatus.DOWNLOADING]
+            active_downloading = [t for t in all_tasks if t.status in (DownloadStatus.DOWNLOADING, DownloadStatus.CONVERTING)]
             active_connecting = [t for t in all_tasks if t.status == DownloadStatus.CONNECTING]
             active_errors = [t for t in all_tasks if t.status == DownloadStatus.ERROR]
             total_speed = sum(t.speed_bytes_per_sec for t in active_downloading)
@@ -349,7 +349,7 @@ class QueueManager:
             task_ids = list(self._tasks.keys())
         for tid in task_ids:
             task = self.get_task(tid)
-            if task and task.status in (DownloadStatus.DOWNLOADING, DownloadStatus.CONNECTING, DownloadStatus.QUEUED):
+            if task and task.status in (DownloadStatus.DOWNLOADING, DownloadStatus.CONNECTING, DownloadStatus.CONVERTING, DownloadStatus.QUEUED):
                 self.pause_task(tid)
 
     def resume_all(self) -> None:
@@ -596,7 +596,7 @@ class QueueManager:
                 for item in raw_list:
                     task = DownloadTask.from_dict(item)
                     # Reset active downloading status on app restart to PAUSED
-                    if task.status in (DownloadStatus.DOWNLOADING, DownloadStatus.CONNECTING):
+                    if task.status in (DownloadStatus.DOWNLOADING, DownloadStatus.CONNECTING, DownloadStatus.CONVERTING):
                         task.status = DownloadStatus.PAUSED
                     self._tasks[task.task_id] = task
         except Exception:

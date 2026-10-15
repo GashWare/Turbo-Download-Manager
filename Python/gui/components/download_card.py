@@ -40,6 +40,7 @@ CATEGORY_ICONS = {
 
 STATUS_COLOR_KEYS = {
     DownloadStatus.DOWNLOADING: "badge_downloading",
+    DownloadStatus.CONVERTING: "badge_converting",
     DownloadStatus.CONNECTING: "badge_connecting",
     DownloadStatus.COMPLETED: "badge_completed",
     DownloadStatus.PAUSED: "badge_paused",
@@ -61,6 +62,9 @@ class SegmentCanvas(tk.Canvas):
         p = self.palette
         self._bg_rect = self.create_rectangle(0, 0, 1, height, fill=p["progress_bg"], outline="")
         self._fill_rect = self.create_rectangle(0, 0, 0, height, fill=p["progress_fill"], outline="")
+        self._pulse_rect = self.create_rectangle(0, 0, 0, height, fill="#e9d5ff", outline="")
+        self._pulse_offset = 0
+        self._animating_converting = False
         self._last_w = 0
         self._last_fill_w = -1
         self._last_color = None
@@ -83,25 +87,54 @@ class SegmentCanvas(tk.Canvas):
 
     def update_segments(self, task: DownloadTask) -> None:
         pct_rounded = round(task.progress_pct, 1)
-        if task.status == self.status and pct_rounded == self.progress_pct:
-            return
+        prev_status = self.status
         self.status = task.status
         self.progress_pct = pct_rounded
         self._update_fill()
+
+        if self.status == DownloadStatus.CONVERTING and not self._animating_converting:
+            self._animating_converting = True
+            self._animate_converting()
+        elif self.status != DownloadStatus.CONVERTING and self._animating_converting:
+            self._animating_converting = False
+            try:
+                self.coords(self._pulse_rect, 0, 0, 0, 0)
+            except Exception:
+                pass
+
+    def _animate_converting(self) -> None:
+        if self.status != DownloadStatus.CONVERTING or not self.winfo_exists():
+            self._animating_converting = False
+            try:
+                self.coords(self._pulse_rect, 0, 0, 0, 0)
+            except Exception:
+                pass
+            return
+        w = self._last_w if self._last_w > 1 else self.winfo_width()
+        if w > 1:
+            h = self.winfo_height() or 8
+            self._pulse_offset = (self._pulse_offset + 8) % (w + 80)
+            p_start = max(0, self._pulse_offset - 80)
+            p_end = min(w, self._pulse_offset)
+            try:
+                self.coords(self._pulse_rect, p_start, 0, p_end, h)
+            except Exception:
+                pass
+        self.after(35, self._animate_converting)
 
     def _update_fill(self) -> None:
         w = self._last_w if self._last_w > 1 else self.winfo_width()
         if w <= 1:
             return
         h = self.winfo_height() or 8
-        filled_w = int(w * (self.progress_pct / 100.0))
+        filled_w = w if self.status == DownloadStatus.CONVERTING else int(w * (self.progress_pct / 100.0))
         if filled_w != self._last_fill_w:
             self.coords(self._fill_rect, 0, 0, filled_w, h)
             self._last_fill_w = filled_w
 
         p = self.palette
         badge_key = STATUS_COLOR_KEYS.get(self.status, "badge_downloading")
-        color = p.get(badge_key, p["progress_fill"])
+        color = p.get(badge_key, "#a855f7" if self.status == DownloadStatus.CONVERTING else p["progress_fill"])
         if color != self._last_color:
             self.itemconfig(self._fill_rect, fill=color)
             self._last_color = color
@@ -462,6 +495,8 @@ class DownloadCard(tk.Frame):
         """Updates the action buttons visibility and text based on current status without redundant re-gridding."""
         if status == DownloadStatus.COMPLETED:
             mode = "COMPLETED"
+        elif status == DownloadStatus.CONVERTING:
+            mode = "CONVERTING"
         elif status in (DownloadStatus.PAUSED, DownloadStatus.QUEUED):
             mode = "PAUSED"
         elif status in (DownloadStatus.ERROR, DownloadStatus.CANCELLED):
@@ -481,11 +516,27 @@ class DownloadCard(tk.Frame):
             self.btn_open_folder.grid(row=0, column=1, padx=3)
             self.btn_details.grid(row=0, column=2, padx=3)
             self.btn_cancel.grid(row=0, column=3, padx=(3, 0))
+        elif mode == "CONVERTING":
+            self.btn_open_file.grid_remove()
+            self.btn_open_folder.grid_remove()
+            self.btn_action.grid(row=0, column=0, padx=3)
+            self.btn_action.configure(
+                text="Converting...",
+                state="disabled",
+                fg_color="#3b1d5c",
+                hover_color="#3b1d5c",
+                text_color="#c084fc",
+                border_width=p.get("btn_border_width", 0),
+                border_color=p.get("btn_border_color", p["btn_bg"])
+            )
+            self.btn_details.grid(row=0, column=1, padx=3)
+            self.btn_cancel.grid(row=0, column=2, padx=(3, 0))
         elif mode == "PAUSED":
             self.btn_open_file.grid_remove()
             self.btn_action.grid(row=0, column=0, padx=3)
             self.btn_action.configure(
                 text="Resume",
+                state="normal",
                 fg_color=p["accent"],
                 hover_color=p["accent_hover"],
                 text_color=p["accent_text"],
@@ -500,6 +551,7 @@ class DownloadCard(tk.Frame):
             self.btn_action.grid(row=0, column=0, padx=3)
             self.btn_action.configure(
                 text="Retry",
+                state="normal",
                 fg_color=p["btn_bg"],
                 hover_color=p["btn_hover"],
                 text_color=p["btn_text"],
@@ -515,6 +567,7 @@ class DownloadCard(tk.Frame):
             self.btn_action.grid(row=0, column=0, padx=3)
             self.btn_action.configure(
                 text="Pause",
+                state="normal",
                 fg_color=p["btn_bg"],
                 hover_color=p["btn_hover"],
                 text_color=p["btn_text"],
@@ -530,6 +583,8 @@ class DownloadCard(tk.Frame):
                 self.on_redownload(self.task)
             else:
                 self.on_pause_resume(self.task)
+        elif self.task.status == DownloadStatus.CONVERTING:
+            return
         else:
             self.on_pause_resume(self.task)
 
@@ -538,16 +593,28 @@ class DownloadCard(tk.Frame):
         self.task = task
         p = self.palette
         
-        # 1. Update Filename if changed
+        # 1. Update Filename if changed (ensuring desired target extension is shown for audio)
         current_name = task.filename or "Initializing..."
+        if getattr(task, "audio_only", False) and task.media_format:
+            target_ext = f".{task.media_format.lower()}"
+            if not current_name.lower().endswith(target_ext) and "." in current_name:
+                import os
+                base_f, _ = os.path.splitext(current_name)
+                current_name = f"{base_f}{target_ext}"
+                task.filename = current_name
+
         if current_name != self._last_filename:
             self.filename_label.configure(text=current_name)
             self._last_filename = current_name
+
+        # Update category icon if audio
+        cat_icon = "🎵" if (getattr(task, "audio_only", False) or task.category == DownloadCategory.AUDIO) else CATEGORY_ICONS.get(task.category, "📁")
+        self.icon_label.configure(text=cat_icon)
         
         # 2. Update Status Badge if changed
         if task.status != self._last_status:
             badge_key = STATUS_COLOR_KEYS.get(task.status, "badge_queued")
-            status_color = p.get(badge_key, "#555")
+            status_color = p.get(badge_key, "#a855f7" if task.status == DownloadStatus.CONVERTING else "#555")
             self.status_badge.configure(text=task.status.value, fg_color=status_color)
             self._last_status = task.status
 
@@ -556,31 +623,37 @@ class DownloadCard(tk.Frame):
 
         # 4. Construct Metrics text
         pct = task.progress_pct
-        transferred = f"{format_bytes(task.downloaded_bytes)} / {format_bytes(task.total_bytes)}"
-        speed_str = f"{format_bytes(task.speed_bytes_per_sec)}/s" if task.status == DownloadStatus.DOWNLOADING else ""
-        eta_str = f"ETA: {format_eta(task.eta_seconds)}" if task.eta_seconds is not None else ""
-        
-        info_parts = [f"{transferred} ({pct:.1f}%)"]
-        if speed_str:
-            info_parts.append(speed_str)
-        if eta_str:
-            info_parts.append(eta_str)
-        if task.is_torrent:
-            if task.leech_only:
-                info_parts.append("🛡️ Leech Only")
+        if task.status == DownloadStatus.CONVERTING:
+            fmt = (getattr(task, "media_format", None) or "MP3").upper()
+            if getattr(task, "audio_only", False) or task.category == DownloadCategory.AUDIO:
+                metrics_text = f"🔄 Transcoding audio to {fmt} (320 kbps)... Please wait"
             else:
-                info_parts.append(f"🧲 P2P (⬆ {format_bytes(task.upload_speed_bytes_per_sec)}/s)")
-            if task.num_peers > 0 or task.num_seeds > 0:
-                info_parts.append(f"S: {task.num_seeds} | P: {task.num_peers}")
-        elif task.supports_range and task.num_connections > 1:
-            info_parts.append(f"⚡ {task.num_connections} conns")
-        elif task.is_media_stream:
-            info_parts.append("★ Stream")
+                metrics_text = f"🔄 Merging & Processing {fmt} media (FFmpeg)... Please wait"
+        elif task.error_message:
+            metrics_text = f"Error: {task.error_message}"
+        else:
+            transferred = f"{format_bytes(task.downloaded_bytes)} / {format_bytes(task.total_bytes)}"
+            speed_str = f"{format_bytes(task.speed_bytes_per_sec)}/s" if task.status == DownloadStatus.DOWNLOADING else ""
+            eta_str = f"ETA: {format_eta(task.eta_seconds)}" if task.eta_seconds is not None else ""
+            
+            info_parts = [f"{transferred} ({pct:.1f}%)"]
+            if speed_str:
+                info_parts.append(speed_str)
+            if eta_str:
+                info_parts.append(eta_str)
+            if task.is_torrent:
+                if task.leech_only:
+                    info_parts.append("🛡️ Leech Only")
+                else:
+                    info_parts.append(f"🧲 P2P (⬆ {format_bytes(task.upload_speed_bytes_per_sec)}/s)")
+                if task.num_peers > 0 or task.num_seeds > 0:
+                    info_parts.append(f"S: {task.num_seeds} | P: {task.num_peers}")
+            elif task.supports_range and task.num_connections > 1:
+                info_parts.append(f"⚡ {task.num_connections} conns")
+            elif task.is_media_stream:
+                info_parts.append("★ Stream")
+            metrics_text = " • ".join(info_parts)
 
-        if task.error_message:
-            info_parts = [f"Error: {task.error_message}"]
-
-        metrics_text = " • ".join(info_parts)
         if metrics_text != self._last_metrics_text:
             self.metrics_label.configure(text=metrics_text)
             self._last_metrics_text = metrics_text
