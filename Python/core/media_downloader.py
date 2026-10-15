@@ -193,18 +193,22 @@ class MediaDownloader:
                     def warning(self, msg): pass
                     def error(self, msg): pass
 
+                node_bin = OSUtils.get_node_path()
+                js_runtimes = {"node": {"path": node_bin}} if node_bin else {"node": {}}
+
                 ydl_opts = {
                     "paths": {"home": temp_dir, "temp": temp_dir},
                     "outtmpl": out_template,
                     "progress_hooks": [self._progress_hook],
                     "postprocessor_hooks": [self._postprocessor_hook],
                     "logger": YtDlpQuietLogger(),
-                    "js_runtimes": {"node": {}},
+                    "js_runtimes": js_runtimes,
                     "quiet": True,
                     "no_warnings": True,
                     "no_color": True,
                     "nocheckcertificate": True,
-                    "socket_timeout": 20,
+                    "socket_timeout": 30,
+                    "http_chunk_size": 10485760,
                     "retries": 25,
                     "fragment_retries": 40,
                     "file_access_retries": 5,
@@ -223,7 +227,11 @@ class MediaDownloader:
                     ydl_opts["allowed_extractors"] = ["vimeo", "generic"]
 
                 if audio_only:
-                    ydl_opts["format"] = "bestaudio/best"
+                    # Prioritize m4a streams which avoid GoogleVideo CDN 403 Forbidden throttling on format 251 (opus)
+                    if target_format in ("mp3", "m4a", "aac", "wav"):
+                        ydl_opts["format"] = "bestaudio[ext=m4a]/bestaudio/best"
+                    else:
+                        ydl_opts["format"] = "bestaudio/best"
                     ydl_opts["postprocessors"] = [{
                         "key": "FFmpegExtractAudio",
                         "preferredcodec": target_format,
@@ -255,17 +263,33 @@ class MediaDownloader:
                         info = ydl.extract_info(self.task.url, download=True)
                     except Exception as extract_err:
                         err_str = str(extract_err).lower()
-                        # Fallback: Retry with browser cookies if private/age-restricted
-                        if any(k in err_str for k in ("sign in", "private", "members", "age")):
-                            cookie_browser = get_cached_cookie_browser()
-                            if cookie_browser:
-                                ydl_opts["cookiesfrombrowser"] = cookie_browser
-                                with yt_dlp.YoutubeDL(ydl_opts) as ydl_retry:
-                                    info = ydl_retry.extract_info(self.task.url, download=True)
-                            else:
-                                raise
-                        else:
-                            raise
+                        # Fallback: Retry on 403, forbidden, page reload, or authentication barriers
+                        retry_success = False
+                        if any(k in err_str for k in ("403", "forbidden", "the page needs to be reloaded", "sign in", "private", "members", "age")):
+                            # Attempt 1: If audio format was bestaudio/best, retry with m4a stream
+                            if audio_only and ydl_opts.get("format") != "bestaudio[ext=m4a]/bestaudio/best":
+                                ydl_opts["format"] = "bestaudio[ext=m4a]/bestaudio/best"
+                                try:
+                                    with yt_dlp.YoutubeDL(ydl_opts) as ydl_retry:
+                                        info = ydl_retry.extract_info(self.task.url, download=True)
+                                        retry_success = True
+                                except Exception:
+                                    pass
+
+                            # Attempt 2: Try with extracted browser cookies
+                            if not retry_success:
+                                cookie_browser = get_cached_cookie_browser()
+                                if cookie_browser:
+                                    ydl_opts["cookiesfrombrowser"] = cookie_browser
+                                    try:
+                                        with yt_dlp.YoutubeDL(ydl_opts) as ydl_retry:
+                                            info = ydl_retry.extract_info(self.task.url, download=True)
+                                            retry_success = True
+                                    except Exception:
+                                        pass
+
+                        if not retry_success:
+                            raise extract_err
 
                     if info:
                         if custom_name_specified:

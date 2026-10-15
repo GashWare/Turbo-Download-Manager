@@ -207,13 +207,20 @@ def probe_url(
             import yt_dlp
 
             is_playlist_candidate = is_likely_playlist_url(url_stripped)
+            node_bin = None
+            try:
+                from .os_utils import OSUtils
+                node_bin = OSUtils.get_node_path()
+            except Exception:
+                pass
+            js_runtimes = {"node": {"path": node_bin}} if node_bin else {"node": {}}
             ydl_opts = {
                 "quiet": True,
                 "no_warnings": True,
                 "skip_download": True,
                 "socket_timeout": 20,
                 "extract_flat": True if is_playlist_candidate else "in_playlist",
-                "js_runtimes": {"node": {}},
+                "js_runtimes": js_runtimes,
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 try:

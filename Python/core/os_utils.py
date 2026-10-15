@@ -189,3 +189,21 @@ class OSUtils:
                 k32.SetThreadPriority(k32.GetCurrentThread(), 1)  # THREAD_PRIORITY_ABOVE_NORMAL
             except Exception:
                 pass
+
+    @staticmethod
+    def get_node_path() -> Optional[str]:
+        """Finds Node.js binary path across platforms and standard Windows installations."""
+        p = shutil.which("node")
+        if p:
+            return p
+        if sys.platform == "win32":
+            candidates = [
+                r"C:\Program Files\nodejs\node.exe",
+                r"C:\Program Files (x86)\nodejs\node.exe",
+                os.path.expandvars(r"%LOCALAPPDATA%\Programs\node\node.exe"),
+                os.path.expandvars(r"%APPDATA%\npm\node.cmd"),
+            ]
+            for candidate in candidates:
+                if os.path.isfile(candidate):
+                    return candidate
+        return None
