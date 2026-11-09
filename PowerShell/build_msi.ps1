@@ -10,15 +10,25 @@ Write-Host ""
 $RootDir = Split-Path -Parent $PSScriptRoot
 $PythonDir = Join-Path $RootDir "Python"
 $MsiDir = Join-Path $RootDir "MSI"
+$VenvPy = Join-Path $RootDir ".venv\Scripts\python.exe"
+$Py312Py = Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"
+
+if (Test-Path $VenvPy) {
+    $PyBin = $VenvPy
+} elseif (Test-Path $Py312Py) {
+    $PyBin = $Py312Py
+} else {
+    $PyBin = "python"
+}
 
 Set-Location $PythonDir
 
 # Ensure cx_Freeze is installed
-Write-Host "[*] Checking cx_Freeze prerequisite..." -ForegroundColor Yellow
-python -m pip install cx_Freeze
+Write-Host "[*] Checking cx_Freeze prerequisite using $PyBin..." -ForegroundColor Yellow
+& "$PyBin" -m pip install cx_Freeze
 
 Write-Host "[*] Compiling and packaging MSI installer..." -ForegroundColor Cyan
-python setup_msi.py bdist_msi
+& "$PyBin" setup_msi.py bdist_msi
 
 if ($LASTEXITCODE -eq 0) {
     if (-not (Test-Path $MsiDir)) {

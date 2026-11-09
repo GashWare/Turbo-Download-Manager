@@ -10,8 +10,13 @@ import time
 import threading
 import tempfile
 import urllib.request
-from typing import Optional, Callable
-import libtorrent as lt
+from typing import Optional, Callable, Any
+try:
+    import libtorrent as lt
+    LIBTORRENT_AVAILABLE = True
+except ImportError:
+    lt = None
+    LIBTORRENT_AVAILABLE = False
 
 from .models import DownloadTask, DownloadStatus
 
@@ -35,8 +40,8 @@ class TorrentDownloader:
 
         self._stop_event = threading.Event()
         self._state_lock = threading.Lock()
-        self._session: Optional[lt.session] = None
-        self._handle: Optional[lt.torrent_handle] = None
+        self._session: Any = None
+        self._handle: Any = None
         self._thread: Optional[threading.Thread] = None
 
     def start(self) -> None:
@@ -163,6 +168,18 @@ class TorrentDownloader:
 
     def _run(self) -> None:
         """Main supervisor loop tracking live torrent status and pieces."""
+        if not LIBTORRENT_AVAILABLE or lt is None:
+            err_msg = "BitTorrent engine unavailable: 'libtorrent' is not installed in the active Python environment."
+            with self._state_lock:
+                self.task.status = DownloadStatus.ERROR
+                self.task.error_message = err_msg
+                self.task.save_meta()
+            if self.on_error:
+                self.on_error(self.task, err_msg)
+            if self.on_status_change:
+                self.on_status_change(self.task)
+            return
+
         try:
             with self._state_lock:
                 self.task.status = DownloadStatus.CONNECTING
