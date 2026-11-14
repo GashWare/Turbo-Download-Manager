@@ -8,13 +8,34 @@ import os
 import re
 import urllib.parse
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import requests
 
 from .models import DownloadCategory
 from .categories import categorize_filename
 
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 TurboDownload/2.0"
+STANDARD_CHROME_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+
+def build_referer_candidates(url: str) -> List[str]:
+    """Builds candidate Referer URLs (origin and base domain) for anti-hotlink CDNs."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except Exception:
+        return []
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return []
+
+    candidates: List[str] = [f"{parsed.scheme}://{parsed.netloc}/"]
+    host = (parsed.hostname or "").strip(".")
+    parts = host.split(".")
+    if len(parts) >= 3 and not all(p.isdigit() for p in parts):
+        base_domain = ".".join(parts[-2:])
+        base_ref = f"{parsed.scheme}://{base_domain}/"
+        if base_ref not in candidates:
+            candidates.append(base_ref)
+    return candidates
 
 
 @dataclass
@@ -37,6 +58,7 @@ class ProbeResult:
     playlist_title: Optional[str] = None
     playlist_count: int = 0
     playlist_entries: Optional[List[dict]] = None
+    suggested_headers: Optional[Dict[str, str]] = None
 
 
 def extract_filename_from_headers(headers: Dict[str, str], fallback_url: str) -> str:
@@ -310,60 +332,79 @@ def probe_url(
             # Fall back to standard probe if yt-dlp fails
             pass
 
+    def _probe_http_once(req_headers: Dict[str, str]):
+        p_final_url = url
+        p_total_bytes = 0
+        p_supports_range = False
+        p_etag = None
+        p_last_modified = None
+        p_content_type = "application/octet-stream"
+        p_resp_headers: Dict[str, str] = {}
+        p_status = 0
+
+        try:
+            range_headers = req_headers.copy()
+            range_headers["Range"] = "bytes=0-0"
+
+            resp = session.get(url, headers=range_headers, timeout=timeout, stream=True, allow_redirects=True)
+            p_status = resp.status_code
+            p_final_url = str(resp.url)
+            p_resp_headers = dict(resp.headers)
+
+            if resp.status_code == 206:
+                p_supports_range = True
+                content_range = resp.headers.get("Content-Range", "")
+                if "/" in content_range:
+                    try:
+                        p_total_bytes = int(content_range.split("/")[-1])
+                    except (ValueError, IndexError):
+                        pass
+            elif resp.status_code == 200:
+                p_supports_range = False
+                p_total_bytes = int(resp.headers.get("Content-Length", 0))
+                if "bytes" in resp.headers.get("Accept-Ranges", "").lower():
+                    p_supports_range = True
+
+            p_etag = resp.headers.get("ETag")
+            p_last_modified = resp.headers.get("Last-Modified")
+            p_content_type = resp.headers.get("Content-Type", p_content_type).split(";")[0]
+            resp.close()
+        except Exception:
+            try:
+                head_resp = session.head(url, headers=req_headers, timeout=timeout, allow_redirects=True)
+                p_status = head_resp.status_code
+                p_final_url = str(head_resp.url)
+                p_resp_headers = dict(head_resp.headers)
+                p_total_bytes = int(head_resp.headers.get("Content-Length", 0))
+                if "bytes" in head_resp.headers.get("Accept-Ranges", "").lower():
+                    p_supports_range = True
+                p_etag = head_resp.headers.get("ETag")
+                p_last_modified = head_resp.headers.get("Last-Modified")
+                p_content_type = head_resp.headers.get("Content-Type", p_content_type).split(";")[0]
+            except Exception:
+                pass
+
+        return p_status, p_final_url, p_total_bytes, p_supports_range, p_etag, p_last_modified, p_content_type, p_resp_headers
+
     session = requests.Session()
     session.headers.update(headers)
 
-    final_url = url
-    total_bytes = 0
-    supports_range = False
-    etag = None
-    last_modified = None
-    content_type = "application/octet-stream"
-    resp_headers: Dict[str, str] = {}
+    status_code, final_url, total_bytes, supports_range, etag, last_modified, content_type, resp_headers = _probe_http_once(headers)
+    suggested_headers: Optional[Dict[str, str]] = None
 
-    try:
-        # Step 1: Try a Range GET for bytes 0-0
-        # This is the most reliable check: servers supporting Range return 206 Partial Content
-        range_headers = headers.copy()
-        range_headers["Range"] = "bytes=0-0"
-        
-        resp = session.get(url, headers=range_headers, timeout=timeout, stream=True, allow_redirects=True)
-        final_url = str(resp.url)
-        resp_headers = dict(resp.headers)
-        
-        if resp.status_code == 206:
-            supports_range = True
-            content_range = resp.headers.get("Content-Range", "")
-            if "/" in content_range:
-                try:
-                    total_bytes = int(content_range.split("/")[-1])
-                except (ValueError, IndexError):
-                    pass
-        elif resp.status_code == 200:
-            # Server ignored Range header or doesn't support ranges
-            supports_range = False
-            total_bytes = int(resp.headers.get("Content-Length", 0))
-        
-        etag = resp.headers.get("ETag")
-        last_modified = resp.headers.get("Last-Modified")
-        content_type = resp.headers.get("Content-Type", content_type).split(";")[0]
-        resp.close()
-
-    except Exception:
-        # Fallback to standard HEAD request
-        try:
-            head_resp = session.head(url, timeout=timeout, allow_redirects=True)
-            final_url = str(head_resp.url)
-            resp_headers = dict(head_resp.headers)
-            total_bytes = int(head_resp.headers.get("Content-Length", 0))
-            accept_ranges = head_resp.headers.get("Accept-Ranges", "")
-            if "bytes" in accept_ranges.lower():
-                supports_range = True
-            etag = head_resp.headers.get("ETag")
-            last_modified = head_resp.headers.get("Last-Modified")
-            content_type = head_resp.headers.get("Content-Type", content_type).split(";")[0]
-        except Exception:
-            pass
+    has_referer = any(k.lower() == "referer" for k in headers)
+    if status_code not in (200, 206) and not has_referer:
+        for ref in build_referer_candidates(url):
+            retry_headers = headers.copy()
+            retry_headers["Referer"] = ref
+            retry_headers["User-Agent"] = STANDARD_CHROME_USER_AGENT
+            s_code, f_url, t_bytes, s_range, r_etag, r_lm, r_ct, r_hdrs = _probe_http_once(retry_headers)
+            if s_code in (200, 206):
+                status_code, final_url, total_bytes, supports_range, etag, last_modified, content_type, resp_headers = (
+                    s_code, f_url, t_bytes, s_range, r_etag, r_lm, r_ct, r_hdrs
+                )
+                suggested_headers = {"Referer": ref, "User-Agent": STANDARD_CHROME_USER_AGENT}
+                break
 
     filename = extract_filename_from_headers(resp_headers, final_url)
     category = categorize_filename(filename, content_type)
@@ -378,5 +419,6 @@ def probe_url(
         last_modified=last_modified,
         content_type=content_type,
         category=category,
-        is_media_stream=False
+        is_media_stream=False,
+        suggested_headers=suggested_headers
     )

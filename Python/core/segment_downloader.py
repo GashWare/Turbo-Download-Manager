@@ -25,9 +25,10 @@ from urllib3.util.retry import Retry
 from .models import DownloadTask, DownloadStatus, Segment
 from .rate_limiter import RateLimiter
 from .os_utils import OSUtils
+from .prober import build_referer_candidates, STANDARD_CHROME_USER_AGENT
 
-MIN_BUFFER_SIZE = 64 * 1024       # 64 KB minimum buffer
-MAX_BUFFER_SIZE = 512 * 1024      # 512 KB maximum buffer for high-bandwidth links
+MIN_BUFFER_SIZE = 256 * 1024      # 256 KB minimum buffer
+MAX_BUFFER_SIZE = 1024 * 1024     # 1 MB maximum buffer for high-bandwidth links
 MIN_SPLIT_SIZE = 2 * 1024 * 1024  # 2 MB minimum remaining to split dynamically
 PROGRESS_INTERVAL = 0.25          # Report progress every 250ms
 
@@ -63,6 +64,45 @@ class SegmentDownloader:
         self._last_time = time.monotonic()
         self._speed_history: List[float] = []
 
+        # Adaptive concurrency governor (prevents 503/429 stampedes on connection-limited CDNs)
+        self._conn_cond = threading.Condition()
+        self._active_conns = 0
+        self._max_active_conns = max(1, min(task.num_connections or 16, 32))
+        self._last_throttle_time = 0.0
+
+    def _acquire_conn_slot(self) -> bool:
+        with self._conn_cond:
+            while self._active_conns >= self._max_active_conns and not self._stop_event.is_set():
+                self._conn_cond.wait(timeout=0.5)
+            if self._stop_event.is_set():
+                return False
+            self._active_conns += 1
+            return True
+
+    def _release_conn_slot(self) -> None:
+        with self._conn_cond:
+            if self._active_conns > 0:
+                self._active_conns -= 1
+            self._conn_cond.notify(1)
+
+    def _report_server_throttle(self) -> None:
+        now = time.monotonic()
+        with self._conn_cond:
+            if now - self._last_throttle_time >= 0.5:
+                self._last_throttle_time = now
+                in_flight = max(1, self._active_conns - 1)
+                new_limit = max(1, min(in_flight, self._max_active_conns - 1))
+                if new_limit < self._max_active_conns:
+                    self._max_active_conns = new_limit
+
+    def _report_clean_completion(self) -> None:
+        now = time.monotonic()
+        with self._conn_cond:
+            hard_cap = max(1, min(self.task.num_connections or 16, 32))
+            if self._max_active_conns < hard_cap and (now - self._last_throttle_time) >= 5.0:
+                self._max_active_conns += 1
+                self._conn_cond.notify(1)
+
     def start(self) -> None:
         """Starts the download process in a dedicated supervisor thread."""
         self._stop_event.clear()
@@ -74,6 +114,8 @@ class SegmentDownloader:
         """Signals all workers to pause and checkpoints state."""
         self._pause_event.set()
         self._stop_event.set()
+        with self._conn_cond:
+            self._conn_cond.notify_all()
         with self._state_lock:
             self.task.status = DownloadStatus.PAUSED
             self.task.speed_bytes_per_sec = 0.0
@@ -85,6 +127,8 @@ class SegmentDownloader:
     def cancel(self) -> None:
         """Cancels download."""
         self._stop_event.set()
+        with self._conn_cond:
+            self._conn_cond.notify_all()
         with self._state_lock:
             self.task.status = DownloadStatus.CANCELLED
             self.task.speed_bytes_per_sec = 0.0
@@ -97,9 +141,9 @@ class SegmentDownloader:
         """Creates a tuned requests session with high connection pooling and keep-alive."""
         session = requests.Session()
         retry_strategy = Retry(
-            total=5,
-            backoff_factor=1.0,
-            status_forcelist=[429, 500, 502, 503, 504],
+            total=3,
+            backoff_factor=0.5,
+            status_forcelist=[500, 502, 504],
             raise_on_status=False
         )
         adapter = HTTPAdapter(
@@ -235,31 +279,45 @@ class SegmentDownloader:
     def _get_dynamic_buffer_size(self) -> int:
         """Dynamically scales chunk buffer size based on current transfer rate."""
         speed = self.task.speed_bytes_per_sec
-        if speed > 20 * 1024 * 1024:  # > 20 MB/s
-            return MAX_BUFFER_SIZE  # 512 KB
+        if speed > 20 * 1024 * 1024 or speed == 0.0:  # > 20 MB/s or initial ramp
+            return MAX_BUFFER_SIZE  # 1 MB
         elif speed > 5 * 1024 * 1024:  # > 5 MB/s
-            return 256 * 1024       # 256 KB
-        elif speed > 1024 * 1024:      # > 1 MB/s
-            return 128 * 1024       # 128 KB
-        return MIN_BUFFER_SIZE      # 64 KB
+            return 512 * 1024       # 512 KB
+        return MIN_BUFFER_SIZE      # 256 KB
 
     def _worker_loop(self, segment: Segment, dest_path: str) -> None:
         """Worker loop that downloads a single segment with thread-local file handles."""
         session = self._create_http_session()
         retry_delay = 1.0
+        has_referer = any(k.lower() == "referer" for k in session.headers)
+        ref_candidates = [] if has_referer else build_referer_candidates(self.task.url)
+        ref_idx = 0
 
         while not self._stop_event.is_set():
             if segment.current_byte > segment.end_byte:
                 segment.status = "COMPLETED"
                 break
 
+            if not self._acquire_conn_slot():
+                break
+
             segment.status = "DOWNLOADING"
             range_header = f"bytes={segment.current_byte}-{segment.end_byte}"
             headers = {"Range": range_header}
+            throttled = False
 
             try:
                 with open(dest_path, "r+b") as fh:
                     with session.get(self.task.url, headers=headers, stream=True, timeout=(10.0, 30.0)) as resp:
+                        if resp.status_code in (400, 401, 403, 406, 412) and ref_idx < len(ref_candidates):
+                            session.headers["Referer"] = ref_candidates[ref_idx]
+                            session.headers["User-Agent"] = STANDARD_CHROME_USER_AGENT
+                            ref_idx += 1
+                            continue
+                        if resp.status_code in (429, 503):
+                            throttled = True
+                            self._report_server_throttle()
+                            raise IOError(f"HTTP {resp.status_code} (server concurrency limit)")
                         if resp.status_code not in (200, 206):
                             raise IOError(f"HTTP {resp.status_code} for range {range_header}")
 
@@ -286,15 +344,26 @@ class SegmentDownloader:
 
                         if segment.current_byte > segment.end_byte:
                             segment.status = "COMPLETED"
+                            self._report_clean_completion()
                             break
 
             except Exception as e:
                 segment.error_message = str(e)
                 if self._stop_event.is_set():
                     break
-                # Backoff retry
-                time.sleep(retry_delay + random.uniform(0.1, 0.5))
-                retry_delay = min(retry_delay * 2, 16.0)
+                if ref_idx < len(ref_candidates) and isinstance(e, (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError)):
+                    session.headers["Referer"] = ref_candidates[ref_idx]
+                    session.headers["User-Agent"] = STANDARD_CHROME_USER_AGENT
+                    ref_idx += 1
+                    continue
+                if throttled:
+                    # Short wait before re-entering the concurrency queue (which wakes immediately when a slot frees)
+                    time.sleep(random.uniform(0.3, 1.0))
+                else:
+                    time.sleep(retry_delay + random.uniform(0.1, 0.5))
+                    retry_delay = min(retry_delay * 2, 16.0)
+            finally:
+                self._release_conn_slot()
 
         session.close()
 

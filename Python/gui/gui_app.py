@@ -947,7 +947,8 @@ class TurboDownloadApp(ctk.CTk):
             download_limit_kbps=data.get("download_limit_kbps", 0),
             upload_limit_kbps=data.get("upload_limit_kbps", 0),
             dht_enabled=data.get("dht_enabled", True),
-            torrent_info_hash=data.get("torrent_info_hash")
+            torrent_info_hash=data.get("torrent_info_hash"),
+            custom_headers=data.get("custom_headers")
         )
         self._refresh_downloads_list()
 

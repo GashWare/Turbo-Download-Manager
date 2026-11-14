@@ -14,6 +14,7 @@ import requests
 from .models import DownloadTask, DownloadStatus
 from .rate_limiter import RateLimiter
 from .os_utils import OSUtils
+from .prober import build_referer_candidates, STANDARD_CHROME_USER_AGENT
 
 CHUNK_SIZE = 64 * 1024  # 64 KB
 
@@ -98,55 +99,98 @@ class StreamDownloader:
                 mode = "ab"
                 headers["Range"] = f"bytes={downloaded}-"
 
-            with requests.get(self.task.url, headers=headers, stream=True, timeout=(10.0, 30.0)) as resp:
-                if resp.status_code not in (200, 206):
-                    raise IOError(f"Server returned HTTP {resp.status_code}")
+            has_referer = any(k.lower() == "referer" for k in headers)
+            ref_candidates = [] if has_referer else build_referer_candidates(self.task.url)
+            ref_idx = 0
+            max_retries = 5
+            attempt = 0
 
-                # If server restarted from 0 on 200 OK
-                if resp.status_code == 200:
-                    mode = "wb"
-                    downloaded = 0
-
-                with open(dest_path, mode) as f:
-                    self._last_time = time.monotonic()
-                    self._last_downloaded = downloaded
-
-                    for chunk in resp.iter_content(chunk_size=CHUNK_SIZE):
-                        if self._stop_event.is_set():
-                            break
-
-                        if not chunk:
+            while not self._stop_event.is_set():
+                try:
+                    with requests.get(self.task.url, headers=headers, stream=True, timeout=(10.0, 30.0)) as resp:
+                        if resp.status_code in (400, 401, 403, 406, 412) and ref_idx < len(ref_candidates):
+                            headers["Referer"] = ref_candidates[ref_idx]
+                            headers["User-Agent"] = STANDARD_CHROME_USER_AGENT
+                            ref_idx += 1
                             continue
+                        if resp.status_code not in (200, 206):
+                            raise IOError(f"Server returned HTTP {resp.status_code}")
 
-                        chunk_len = len(chunk)
-                        if self.rate_limiter:
-                            self.rate_limiter.acquire(chunk_len)
+                        if any(k.lower() == "referer" for k in headers) and not any(k.lower() == "referer" for k in self.task.custom_headers):
+                            self.task.custom_headers["Referer"] = headers["Referer"]
+                            self.task.custom_headers["User-Agent"] = headers["User-Agent"]
 
-                        f.write(chunk)
-                        downloaded += chunk_len
+                        # If server restarted from 0 on 200 OK
+                        if resp.status_code == 200:
+                            mode = "wb"
+                            downloaded = 0
+                            cl = int(resp.headers.get("Content-Length", 0) or 0)
+                            if cl > 0 and self.task.total_bytes == 0:
+                                self.task.total_bytes = cl
+                        elif resp.status_code == 206:
+                            cr = resp.headers.get("Content-Range", "")
+                            if "/" in cr and self.task.total_bytes == 0:
+                                try:
+                                    self.task.total_bytes = int(cr.split("/")[-1])
+                                except (ValueError, IndexError):
+                                    pass
 
-                        # Update metrics
-                        now = time.monotonic()
-                        elapsed = now - self._last_time
-                        if elapsed >= 0.25:
-                            with self._state_lock:
-                                self.task.downloaded_bytes = downloaded
-                                speed = (downloaded - self._last_downloaded) / elapsed
-                                self._speed_history.append(speed)
-                                if len(self._speed_history) > 6:
-                                    self._speed_history.pop(0)
-                                avg_speed = sum(self._speed_history) / len(self._speed_history)
-                                self.task.speed_bytes_per_sec = avg_speed
+                        with open(dest_path, mode) as f:
+                            self._last_time = time.monotonic()
+                            self._last_downloaded = downloaded
 
-                                if self.task.total_bytes > 0 and avg_speed > 100:
-                                    remaining = max(0, self.task.total_bytes - downloaded)
-                                    self.task.eta_seconds = int(remaining / avg_speed)
+                            for chunk in resp.iter_content(chunk_size=CHUNK_SIZE):
+                                if self._stop_event.is_set():
+                                    break
 
-                                self._last_downloaded = downloaded
-                                self._last_time = now
+                                if not chunk:
+                                    continue
 
-                            if self.on_progress:
-                                self.on_progress(self.task)
+                                chunk_len = len(chunk)
+                                if self.rate_limiter:
+                                    self.rate_limiter.acquire(chunk_len)
+
+                                f.write(chunk)
+                                downloaded += chunk_len
+
+                                # Update metrics
+                                now = time.monotonic()
+                                elapsed = now - self._last_time
+                                if elapsed >= 0.25:
+                                    with self._state_lock:
+                                        self.task.downloaded_bytes = downloaded
+                                        speed = (downloaded - self._last_downloaded) / elapsed
+                                        self._speed_history.append(speed)
+                                        if len(self._speed_history) > 6:
+                                            self._speed_history.pop(0)
+                                        avg_speed = sum(self._speed_history) / len(self._speed_history)
+                                        self.task.speed_bytes_per_sec = avg_speed
+
+                                        if self.task.total_bytes > 0 and avg_speed > 100:
+                                            remaining = max(0, self.task.total_bytes - downloaded)
+                                            self.task.eta_seconds = int(remaining / avg_speed)
+
+                                        self._last_downloaded = downloaded
+                                        self._last_time = now
+
+                                    if self.on_progress:
+                                        self.on_progress(self.task)
+                        break
+                except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError, requests.exceptions.Timeout) as conn_err:
+                    if self._stop_event.is_set():
+                        break
+                    if ref_idx < len(ref_candidates):
+                        headers["Referer"] = ref_candidates[ref_idx]
+                        headers["User-Agent"] = STANDARD_CHROME_USER_AGENT
+                        ref_idx += 1
+                        continue
+                    attempt += 1
+                    if attempt > max_retries:
+                        raise conn_err
+                    if downloaded > 0:
+                        mode = "ab"
+                        headers["Range"] = f"bytes={downloaded}-"
+                    time.sleep(min(2.0 ** attempt, 16.0) + random.uniform(0.1, 0.5))
 
             with self._state_lock:
                 if self._pause_event.is_set():

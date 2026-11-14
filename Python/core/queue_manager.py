@@ -155,6 +155,7 @@ class QueueManager:
         should_start = self.settings.auto_start_downloads if auto_start is None else auto_start
 
         # Check if we already have probe metadata
+        merged_headers = dict(custom_headers) if custom_headers else {}
         if total_bytes is not None and supports_range is not None and filename:
             final_fname = filename
             final_total_bytes = total_bytes
@@ -166,7 +167,7 @@ class QueueManager:
             final_category = category or (DownloadCategory.TORRENT if final_is_torrent else (DownloadCategory.AUDIO if audio_only else categorize_filename(final_fname)))
         else:
             # Probe resource
-            probe = probe_url(url, custom_headers=custom_headers)
+            probe = probe_url(url, custom_headers=merged_headers)
             final_fname = filename or probe.filename
             final_total_bytes = probe.total_bytes
             final_supports_range = probe.supports_range
@@ -175,6 +176,10 @@ class QueueManager:
             final_is_media = probe.is_media_stream
             final_is_torrent = probe.is_torrent or bool(is_torrent)
             final_category = category or (DownloadCategory.TORRENT if final_is_torrent else (DownloadCategory.AUDIO if audio_only else probe.category))
+            if probe.suggested_headers:
+                for k, v in probe.suggested_headers.items():
+                    if not any(ek.lower() == k.lower() for ek in merged_headers):
+                        merged_headers[k] = v
 
         # Check if output file already exists or is already queued, and resolve collision
         target_path = os.path.join(save_dir, final_fname)
@@ -210,7 +215,7 @@ class QueueManager:
             last_modified=final_last_modified,
             num_connections=conns,
             category=final_category,
-            custom_headers=custom_headers or {},
+            custom_headers=merged_headers,
             expected_checksum=expected_checksum,
             checksum_algo=checksum_algo,
             is_media_stream=final_is_media,
@@ -304,6 +309,16 @@ class QueueManager:
                     on_error=self._on_engine_error,
                     on_complete=self._on_engine_complete,
                 )
+            elif task.total_bytes <= 0 and task.downloaded_bytes == 0 and task.url.startswith(("http://", "https://")):
+                # Re-probe in background so failed initial probes (e.g. missing Referer) can still upgrade to SegmentDownloader
+                threading.Thread(
+                    target=self._reprobe_and_launch,
+                    args=(task_id,),
+                    daemon=True,
+                    name=f"Reprobe-{task_id}"
+                ).start()
+                self._save_tasks()
+                return True
             elif task.supports_range and task.total_bytes > 0:
                 engine = SegmentDownloader(
                     task=task,
@@ -327,6 +342,60 @@ class QueueManager:
             engine.start()
             self._save_tasks()
             return True
+
+    def _reprobe_and_launch(self, task_id: str) -> None:
+        """Re-probes an unprobed HTTP task in the background and launches the optimal engine."""
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if not task or task.status != DownloadStatus.CONNECTING:
+                return
+            url = task.url
+            headers = dict(task.custom_headers) if task.custom_headers else {}
+
+        try:
+            probe = probe_url(url, custom_headers=headers, check_media=False)
+        except Exception:
+            probe = None
+
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if not task or task.status != DownloadStatus.CONNECTING:
+                return
+
+            if probe and probe.total_bytes > 0:
+                task.total_bytes = probe.total_bytes
+                task.supports_range = probe.supports_range
+                if probe.etag:
+                    task.etag = probe.etag
+                if probe.last_modified:
+                    task.last_modified = probe.last_modified
+                if probe.suggested_headers:
+                    for k, v in probe.suggested_headers.items():
+                        if not any(ek.lower() == k.lower() for ek in task.custom_headers):
+                            task.custom_headers[k] = v
+
+            if task.supports_range and task.total_bytes > 0:
+                engine = SegmentDownloader(
+                    task=task,
+                    rate_limiter=self.global_rate_limiter,
+                    on_progress=lambda t: self._notify("progress", t),
+                    on_status_change=self._on_engine_status_change,
+                    on_error=self._on_engine_error,
+                    on_complete=self._on_engine_complete,
+                )
+            else:
+                engine = StreamDownloader(
+                    task=task,
+                    rate_limiter=self.global_rate_limiter,
+                    on_progress=lambda t: self._notify("progress", t),
+                    on_status_change=self._on_engine_status_change,
+                    on_error=self._on_engine_error,
+                    on_complete=self._on_engine_complete,
+                )
+
+            self._engines[task_id] = engine
+            engine.start()
+            self._save_tasks()
 
     def pause_task(self, task_id: str) -> bool:
         with self._lock:

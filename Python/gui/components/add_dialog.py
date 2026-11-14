@@ -896,6 +896,7 @@ class AddDownloadDialog(ctk.CTkToplevel):
             "upload_limit_kbps": upload_limit_kbps,
             "dht_enabled": dht_enabled,
             "torrent_info_hash": self.probe_result.torrent_info_hash if self.probe_result else None,
+            "custom_headers": self.probe_result.suggested_headers if self.probe_result else None,
         }
 
         try:
